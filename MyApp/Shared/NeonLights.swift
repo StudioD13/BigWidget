@@ -72,6 +72,19 @@ struct NeonLayout {
     var glyphs: [Glyph] = []
     var size: CGSize = .zero
     var tubeWidth: CGFloat = 0
+    /// Points per glyph unit, and the vertical stretch applied to the 1 × 1.6 glyph box.
+    var unit: CGFloat = 0
+    var stretch: CGFloat = 1
+    /// Each character and its left edge, in glyph units. Other number styles draw from these.
+    var placements: [(character: Character, x: CGFloat)] = []
+
+    /// Room for thickness and glow around the centerlines (in glyph units).
+    static let margin: CGFloat = 0.2
+
+    /// Converts a point in a character's glyph box to view coordinates.
+    func point(_ p: CGPoint, inCharacterAt x: CGFloat) -> CGPoint {
+        CGPoint(x: (x + p.x) * unit, y: (Self.margin + p.y * stretch) * unit)
+    }
 
     /// Digits are sized by width, then made taller (up to `maxStretch`) to use spare height.
     /// Only the path is stretched; tube thickness stays constant, so the digits get tall and thin.
@@ -81,8 +94,7 @@ struct NeonLayout {
 
         let totalAdvance = characters.map(NeonGlyphs.advance).reduce(0, +)
             + NeonGlyphs.gap * CGFloat(characters.count - 1)
-        // Room for the tube's thickness and glow around the centerlines (in glyph units).
-        let margin: CGFloat = 0.2
+        let margin = Self.margin
         let unit = min(
             available.width / (totalAdvance + margin * 2),
             available.height / (NeonGlyphs.height + margin * 2)
@@ -91,10 +103,13 @@ struct NeonLayout {
         let stretch = min(max(available.height / naturalHeight, 1), maxStretch)
 
         tubeWidth = unit * 0.15
+        self.unit = unit
+        self.stretch = stretch
         size = CGSize(width: (totalAdvance + margin * 2) * unit, height: naturalHeight * stretch)
 
         var cursor = margin
         for character in characters {
+            placements.append((character, cursor))
             var glyph = Glyph()
             for stroke in NeonGlyphs.strokes(character) {
                 let points = stroke.map {
@@ -227,10 +242,13 @@ enum NeonSpeed: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// Everything about how numbers look. (Named for the original neon style; it covers every number style.)
 struct NeonStyle: Equatable, Sendable {
     var scheme: NeonScheme = .classic
     var effect: NeonEffect = .coursing
     var speed: NeonSpeed = .normal
+    var numbers: NumberStyle = .neon
+    var bloom: NeonBloom = .soft
 
     /// True when every character shares one color and brightness, so a whole number
     /// can be drawn as a single tube (much cheaper, which matters in widgets).
@@ -335,7 +353,8 @@ struct NeonText: View {
             phase: phase,
             brightness: style.brightness(index: 0, phase: phase),
             glidesBetweenSteps: glidesBetweenSteps,
-            lightweight: lightweight
+            lightweight: lightweight,
+            bloom: style.bloom.multiplier
         )
     }
 
@@ -355,7 +374,8 @@ struct NeonText: View {
                         phase: phase + Double(index) * 0.31,
                         brightness: style.brightness(index: index, phase: phase),
                         glidesBetweenSteps: glidesBetweenSteps,
-                        lightweight: lightweight
+                        lightweight: lightweight,
+                        bloom: style.bloom.multiplier
                     )
                 }
         }
@@ -376,8 +396,10 @@ struct NeonTube: View {
     var glidesBetweenSteps = false
     /// Unlit tubes (e.g. the empty part of the battery meter) show as dark glass only.
     var isLit = true
-    /// Draws the glow as soft stacked strokes instead of blurs (much cheaper, for widgets).
+    /// Cheaper drawing for widgets.
     var lightweight = false
+    /// Glow strength, 0 (none) to 1 (full).
+    var bloom: Double = 1
 
     private var stepAnimation: Animation? {
         glidesBetweenSteps ? .easeInOut(duration: 1.9) : nil
@@ -385,9 +407,9 @@ struct NeonTube: View {
 
     var body: some View {
         ZStack {
-            if isLit {
+            if isLit && bloom > 0 {
                 // Glow cast onto whatever is behind the tube.
-                glow(path, color, width * 2.6, opacity: 0.6 * brightness)
+                glow(path, color, width * (1.4 + 1.2 * bloom), opacity: 0.6 * brightness * bloom)
             }
 
             // Glass tube wall: a darker rim gives the tube its round, solid body.
@@ -431,11 +453,15 @@ struct NeonTube: View {
             )
             let pulseColor = pulseColors[group]
             ZStack {
-                if lightweight {
-                    // Pulses are short, so a plain soft stroke reads as glow without another blur.
-                    shape.stroke(pulseColor.opacity(0.35), style: Self.style(width * 1.5))
-                } else {
-                    shape.stroke(pulseColor, style: Self.style(width * 2)).blur(radius: width * 0.9).opacity(0.8)
+                if bloom > 0 {
+                    if lightweight {
+                        // Pulses are short, so a plain soft stroke reads as glow without another blur.
+                        shape.stroke(pulseColor.opacity(0.35 * bloom), style: Self.style(width * (1 + 0.5 * bloom)))
+                    } else {
+                        shape.stroke(pulseColor, style: Self.style(width * (1.2 + 0.8 * bloom)))
+                            .blur(radius: width * 0.9 * bloom)
+                            .opacity(0.8 * bloom)
+                    }
                 }
                 shape.stroke(pulseColor, style: Self.style(width * 0.72))
                 shape.stroke(pulseColor.mix(with: .white, by: 0.6), style: Self.style(width * 0.3))
@@ -532,7 +558,8 @@ struct NeonMeter: View {
                         phase: phase,
                         brightness: style.brightness(index: 0, phase: phase),
                         glidesBetweenSteps: glidesBetweenSteps,
-                        lightweight: lightweight
+                        lightweight: lightweight,
+                        bloom: style.bloom.multiplier
                     )
                 }
                 if isCharging {

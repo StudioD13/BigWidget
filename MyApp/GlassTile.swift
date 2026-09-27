@@ -5,18 +5,31 @@ struct GlassTile<Content: View>: View {
     var tint: Color
     @ViewBuilder var content: Content
 
+    @Environment(\.neonStyle) private var style
+
     private let shape = RoundedRectangle(cornerRadius: 44, style: .continuous)
 
     var body: some View {
-        content
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            #if os(visionOS)
-            // visionOS has its own physical glass material with real depth.
-            .glassBackgroundEffect(in: shape)
-            #else
-            .glassEffect(.regular.tint(tint.opacity(0.08)).interactive(), in: shape)
-            #endif
+        if style.numbers == .chalk {
+            // Chalk is written on a slate board rather than glass.
+            content
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background { ChalkboardBackground().clipShape(shape) }
+                .overlay { shape.strokeBorder(Color(red: 0.42, green: 0.3, blue: 0.2), lineWidth: 6) }
+                // Labels are written in chalk too: light on the dark board, in any appearance.
+                .environment(\.colorScheme, .dark)
+        } else {
+            content
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if os(visionOS)
+                // visionOS has its own physical glass material with real depth.
+                .glassBackgroundEffect(in: shape)
+                #else
+                .glassEffect(.regular.tint(tint.opacity(0.08)).interactive(), in: shape)
+                #endif
+        }
     }
 }
 
@@ -63,7 +76,7 @@ struct BigReadout<Footer: View>: View {
                     .minimumScaleFactor(0.5)
             }
 
-            NeonText(text: value, color: tint, style: neonStyle, phase: lightPhase)
+            DisplayText(text: value, color: tint, style: neonStyle, phase: lightPhase)
 
             footer
         }

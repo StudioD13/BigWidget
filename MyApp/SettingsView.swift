@@ -7,6 +7,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .classic
     @AppStorage(SharedStore.Key.effect, store: SharedStore.defaults) private var effect: NeonEffect = .coursing
     @AppStorage(SharedStore.Key.speed, store: SharedStore.defaults) private var speed: NeonSpeed = .normal
+    @AppStorage(SharedStore.Key.numbers, store: SharedStore.defaults) private var numbers: NumberStyle = .neon
+    @AppStorage(SharedStore.Key.bloom, store: SharedStore.defaults) private var bloom: NeonBloom = .soft
 
     @AppStorage(AppTile.time.storageKey) private var showTime = true
     @AppStorage(AppTile.date.storageKey) private var showDate = true
@@ -30,6 +32,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Numbers", selection: $numbers) {
+                        ForEach(NumberStyle.allCases, id: \.self) { Text($0.title) }
+                    }
                     Picker("Colors", selection: $scheme) {
                         ForEach(NeonScheme.allCases, id: \.self) { Text($0.title) }
                     }
@@ -40,8 +45,12 @@ struct SettingsView: View {
                         ForEach(NeonSpeed.allCases, id: \.self) { Text($0.title) }
                     }
                     .pickerStyle(.segmented)
+                    Picker("Bloom", selection: $bloom) {
+                        ForEach(NeonBloom.allCases, id: \.self) { Text($0.title) }
+                    }
+                    .pickerStyle(.segmented)
                 } header: {
-                    Text("Neon")
+                    Text("Look")
                 } footer: {
                     Text("Widgets with Match App Style turned on use these too. Widgets can only move once a minute; the app moves continuously.")
                 }
@@ -57,6 +66,8 @@ struct SettingsView: View {
         .onChange(of: scheme) { reloadWidgets() }
         .onChange(of: effect) { reloadWidgets() }
         .onChange(of: speed) { reloadWidgets() }
+        .onChange(of: numbers) { reloadWidgets() }
+        .onChange(of: bloom) { reloadWidgets() }
     }
 
     private func reloadWidgets() {

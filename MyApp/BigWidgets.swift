@@ -59,7 +59,7 @@ struct BatteryWidget: View {
         GlassTile(tint: tint) {
             // The % sign and neon meter say "battery"; no caption needed.
             BigReadout(caption: nil, value: valueText, tint: tint) {
-                NeonMeter(level: monitor.level ?? 0, color: tint, isCharging: monitor.isCharging, style: style, phase: phase)
+                DisplayMeter(level: monitor.level ?? 0, color: tint, isCharging: monitor.isCharging, style: style, phase: phase)
                     .frame(height: 22)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 4)
@@ -92,8 +92,7 @@ struct WeatherWidget: View {
                             Image(systemName: symbol)
                                 .symbolRenderingMode(.monochrome)
                                 .foregroundStyle(glow.mix(with: .white, by: 0.3))
-                                .shadow(color: glow, radius: 3)
-                                .shadow(color: glow.opacity(0.6), radius: 8)
+                                .shadow(color: glow.opacity(style.bloom.multiplier), radius: 6 * style.bloom.multiplier)
                         }
                         Text(caption)
                             .foregroundStyle(tint.mix(with: .primary, by: 0.35))

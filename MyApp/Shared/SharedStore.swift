@@ -15,6 +15,8 @@ enum SharedStore {
         static let scheme = "neonScheme"
         static let effect = "neonEffect"
         static let speed = "neonSpeed"
+        static let numbers = "numberStyle"
+        static let bloom = "neonBloom"
         static let latitude = "lastLatitude"
         static let longitude = "lastLongitude"
         static let locationDate = "lastLocationDate"
@@ -29,7 +31,9 @@ enum SharedStore {
         NeonStyle(
             scheme: defaults.string(forKey: Key.scheme).flatMap(NeonScheme.init(rawValue:)) ?? .classic,
             effect: defaults.string(forKey: Key.effect).flatMap(NeonEffect.init(rawValue:)) ?? .coursing,
-            speed: defaults.string(forKey: Key.speed).flatMap(NeonSpeed.init(rawValue:)) ?? .normal
+            speed: defaults.string(forKey: Key.speed).flatMap(NeonSpeed.init(rawValue:)) ?? .normal,
+            numbers: defaults.string(forKey: Key.numbers).flatMap(NumberStyle.init(rawValue:)) ?? .neon,
+            bloom: defaults.string(forKey: Key.bloom).flatMap(NeonBloom.init(rawValue:)) ?? .soft
         )
     }
 

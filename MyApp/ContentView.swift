@@ -10,6 +10,8 @@ struct ContentView: View {
     @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .classic
     @AppStorage(SharedStore.Key.effect, store: SharedStore.defaults) private var effect: NeonEffect = .coursing
     @AppStorage(SharedStore.Key.speed, store: SharedStore.defaults) private var speed: NeonSpeed = .normal
+    @AppStorage(SharedStore.Key.numbers, store: SharedStore.defaults) private var numbers: NumberStyle = .neon
+    @AppStorage(SharedStore.Key.bloom, store: SharedStore.defaults) private var bloom: NeonBloom = .soft
 
     @AppStorage(AppTile.time.storageKey) private var showTime = true
     @AppStorage(AppTile.date.storageKey) private var showDate = true
@@ -33,7 +35,7 @@ struct ContentView: View {
                 .padding(spacing)
             }
             .environment(\.lightPhase, reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate * Self.lightTravelPerSecond * speed.multiplier)
-            .environment(\.neonStyle, NeonStyle(scheme: scheme, effect: effect, speed: speed))
+            .environment(\.neonStyle, NeonStyle(scheme: scheme, effect: effect, speed: speed, numbers: numbers, bloom: bloom))
         }
         .overlay(alignment: .bottomTrailing) { settingsButton }
         .sheet(isPresented: $showsSettings) {

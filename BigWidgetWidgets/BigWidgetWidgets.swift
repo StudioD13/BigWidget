@@ -73,8 +73,11 @@ struct BigWidgetWidgets: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
             BigWidgetEntryView(entry: entry)
-                // Clear, removable background: as close to no background as WidgetKit allows.
-                .containerBackground(for: .widget) { Color.clear }
+                // Clear, removable background (as close to none as WidgetKit allows);
+                // chalk gets a slate board, which the system can still remove (e.g. in StandBy).
+                .containerBackground(for: .widget) {
+                    if entry.style.numbers == .chalk { ChalkboardBackground() } else { Color.clear }
+                }
         }
         .configurationDisplayName("BigWidget")
         .description("Huge neon time, date, battery, and weather. Show any combination.")
@@ -98,6 +101,7 @@ struct BigWidgetEntryView: View {
     var entry: BigWidgetEntry
 
     @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
 
@@ -146,6 +150,8 @@ struct BigWidgetEntryView: View {
             }
         }
         .padding(10)
+        // On the chalkboard, labels are chalk too: light text regardless of appearance.
+        .environment(\.colorScheme, entry.style.numbers == .chalk ? .dark : colorScheme)
     }
 
     private func cell(_ readout: Readout) -> some View {
@@ -243,7 +249,7 @@ struct ReadoutCell: View {
         case .battery:
             VStack(spacing: 2) {
                 lights(ReadoutFormat.battery(battery.level))
-                NeonMeter(
+                DisplayMeter(
                     level: battery.level ?? 0,
                     color: tint,
                     isCharging: battery.isCharging,
@@ -290,17 +296,17 @@ struct ReadoutCell: View {
     /// The WeatherKit condition symbol, lit like neon.
     private func conditionIcon(size: CGFloat) -> some View {
         let color = isFullColor ? style.tubeColor(index: 0, readout: tint) : .white
+        let bloom = style.bloom.multiplier
         return Image(systemName: weather?.symbolName ?? "questionmark")
             .font(.system(size: size, weight: .semibold))
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(color.mix(with: .white, by: 0.3))
-            .shadow(color: color, radius: size * 0.12)
-            .shadow(color: color.opacity(0.6), radius: size * 0.35)
+            .shadow(color: color.opacity(bloom), radius: size * 0.12 * bloom)
             .widgetAccentable()
     }
 
     private func lights(_ text: String) -> some View {
-        NeonText(
+        DisplayText(
             text: text,
             color: tint,
             style: style,
@@ -362,8 +368,8 @@ private let sampleBattery = BatteryReading(level: 0.82, isCharging: true)
 private let previewStyles: [String: NeonStyle] = [
     "timeOnly": NeonStyle(scheme: .classic, effect: .coursing),
     "timeAndDate": NeonStyle(scheme: .rainbow, effect: .sparkle),
-    "all": NeonStyle(scheme: .classic, effect: .coursing, speed: .fast),
-    "weatherOnly": NeonStyle(scheme: .purple, effect: .spectrum)
+    "all": NeonStyle(scheme: .classic, effect: .coursing, speed: .fast, numbers: .chalk),
+    "weatherOnly": NeonStyle(scheme: .purple, effect: .spectrum, numbers: .segments)
 ]
 
 #Preview("Small", as: .systemSmall) {

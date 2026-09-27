@@ -22,6 +22,9 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     @Parameter(title: "Match App Style", default: true)
     var matchAppStyle: Bool
 
+    @Parameter(title: "Numbers", default: .neon)
+    var numbers: NumberStyle
+
     @Parameter(title: "Colors", default: .classic)
     var scheme: NeonScheme
 
@@ -30,6 +33,9 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
 
     @Parameter(title: "Speed", default: .normal)
     var speed: NeonSpeed
+
+    @Parameter(title: "Bloom", default: .soft)
+    var bloom: NeonBloom
 
     static var parameterSummary: some ParameterSummary {
         When(\.$matchAppStyle, .equalTo, true) {
@@ -47,9 +53,11 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
                 \.$showBattery
                 \.$showWeather
                 \.$matchAppStyle
+                \.$numbers
                 \.$scheme
                 \.$effect
                 \.$speed
+                \.$bloom
             }
         }
     }
@@ -68,6 +76,8 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
         scheme = style?.scheme ?? .classic
         effect = style?.effect ?? .coursing
         speed = style?.speed ?? .normal
+        numbers = style?.numbers ?? .neon
+        bloom = style?.bloom ?? .soft
     }
 
     /// The readouts to show, in display order. Falls back to Time if everything is switched off.
@@ -82,7 +92,9 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
 
     /// The style to draw with: the app's (from the shared App Group) or this widget's own.
     var style: NeonStyle {
-        matchAppStyle ? SharedStore.appStyle : NeonStyle(scheme: scheme, effect: effect, speed: speed)
+        matchAppStyle
+            ? SharedStore.appStyle
+            : NeonStyle(scheme: scheme, effect: effect, speed: speed, numbers: numbers, bloom: bloom)
     }
 }
 
@@ -118,6 +130,31 @@ extension NeonEffect: AppEnum {
             .breathe: "Breathe",
             .flicker: "Flicker",
             .steady: "Steady"
+        ]
+    }
+}
+
+extension NumberStyle: AppEnum {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Numbers" }
+    static var caseDisplayRepresentations: [NumberStyle: DisplayRepresentation] {
+        [
+            .neon: "Neon",
+            .chalk: "Chalk",
+            .brokenLine: "Broken Line",
+            .segments: "Segments",
+            .dotMatrix: "Dot Matrix"
+        ]
+    }
+}
+
+extension NeonBloom: AppEnum {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Bloom" }
+    static var caseDisplayRepresentations: [NeonBloom: DisplayRepresentation] {
+        [
+            .off: "Off",
+            .soft: "Soft",
+            .medium: "Medium",
+            .strong: "Strong"
         ]
     }
 }
