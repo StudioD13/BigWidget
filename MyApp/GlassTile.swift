@@ -36,12 +36,19 @@ struct TileGroup<Content: View>: View {
     }
 }
 
-/// A big readout: optional small caption, a huge bubbly value that fills the space, and a footer.
+extension EnvironmentValues {
+    /// Advances continuously in the app to move the light coursing through the neon tubes.
+    @Entry var lightPhase: Double = 0
+}
+
+/// A big readout: optional small caption, a huge neon value that fills the space, and a footer.
 struct BigReadout<Footer: View>: View {
     var caption: String?
     var value: String
     var tint: Color
     @ViewBuilder var footer: Footer
+
+    @Environment(\.lightPhase) private var lightPhase
 
     var body: some View {
         VStack(spacing: 2) {
@@ -53,10 +60,7 @@ struct BigReadout<Footer: View>: View {
                     .minimumScaleFactor(0.5)
             }
 
-            GeometryReader { proxy in
-                BubbleText(text: value, tint: tint, fit: BubbleText.Fit(value, in: proxy.size))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            NeonText(text: value, color: tint, phase: lightPhase)
 
             footer
         }

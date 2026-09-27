@@ -48,15 +48,17 @@ struct DateWidget: View {
 struct BatteryWidget: View {
     var monitor: BatteryMonitor
 
+    @Environment(\.lightPhase) private var phase
+
     var body: some View {
         let tint = ReadoutFormat.batteryTint(monitor.level)
         let valueText = ReadoutFormat.battery(monitor.level)
 
         GlassTile(tint: tint) {
-            // The % sign and gauge say "battery"; no caption needed.
+            // The % sign and bulb meter say "battery"; no caption needed.
             BigReadout(caption: nil, value: valueText, tint: tint) {
-                BubbleGauge(level: monitor.level ?? 0, tint: tint, isCharging: monitor.isCharging)
-                    .frame(height: 16)
+                NeonMeter(level: monitor.level ?? 0, color: tint, isCharging: monitor.isCharging, phase: phase)
+                    .frame(height: 22)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 4)
             }

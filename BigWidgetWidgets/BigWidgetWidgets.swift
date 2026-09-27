@@ -44,11 +44,12 @@ struct BigWidgetWidgets: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
             BigWidgetEntryView(entry: entry)
-                // Transparent: the bubbly numbers float right on the wallpaper.
+                // Clear, removable background: as close to no background as WidgetKit allows.
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("BigWidget")
-        .description("Huge, bubbly time, date, and battery. Pick one, two, or all three.")
+        .description("Huge neon time, date, and battery. Pick one, two, or all three.")
+        .containerBackgroundRemovable(true)
         .supportedFamilies(Self.families)
         .contentMarginsDisabled()
     }
@@ -107,13 +108,13 @@ struct BigWidgetEntryView: View {
 
     private func cell(_ readout: Readout) -> some View {
         ReadoutCell(readout: readout, date: entry.date, battery: entry.battery)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 // MARK: - Cell
 
-/// One readout, sized so the number fills nearly all of its space.
+/// One readout drawn in neon tubes, sized so the tubes fill nearly all of its space.
 /// Small labels sit beside the number when the cell is wide, or tight above it when it's tall.
 struct ReadoutCell: View {
     var readout: Readout
@@ -122,10 +123,18 @@ struct ReadoutCell: View {
 
     @Environment(\.widgetRenderingMode) private var renderingMode
 
+    /// Widgets can't animate continuously, so the light coursing through the tubes advances once per
+    /// timeline entry (each minute) and glides to its new spot — a brief light show as the minute changes.
+    private var phase: Double {
+        (date.timeIntervalSinceReferenceDate / 60).rounded(.down) * 0.137
+    }
+
+    private var isFullColor: Bool { renderingMode == .fullColor }
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let labelSize = min(max(size.height * 0.13, 10), 26)
+            let labelSize = min(max(size.height * 0.12, 10), 24)
 
             content(in: size, labelSize: labelSize)
                 .frame(width: size.width, height: size.height)
@@ -138,89 +147,85 @@ struct ReadoutCell: View {
     private func content(in size: CGSize, labelSize: CGFloat) -> some View {
         switch readout {
         case .time:
-            // No "TIME" label — a clock is self-explanatory. AM/PM tucks in at the digits' bottom corner.
+            // No "TIME" label — a clock is self-explanatory. AM/PM tucks in at the bottom corner.
             let period = ReadoutFormat.period(date)
             let periodWidth = period == nil ? 0 : labelSize * 1.7
             let digitsSpace = CGSize(width: size.width - periodWidth, height: size.height)
 
-            HStack(alignment: .bottom, spacing: 2) {
-                if size.width < size.height * 1.4 {
-                    // Squarish or tall: stack hours over minutes so the digits fill the space.
+            HStack(alignment: .bottom, spacing: 0) {
+                if NeonLayout.prefersStackedClock(in: digitsSpace) {
+                    // Squarish or tall: hours over minutes makes much bigger digits.
                     let parts = ReadoutFormat.clockParts(date)
-                    let gap = size.height * 0.03
-                    let lineSpace = CGSize(width: digitsSpace.width, height: (digitsSpace.height - gap) / 2)
-                    // Size both lines as two digits so they match even when the hour is one digit.
-                    let fit = BubbleText.Fit("00", in: lineSpace)
-                    VStack(spacing: gap) {
-                        number(parts.hour, fit: fit, width: lineSpace.width)
-                        number(parts.minute, fit: fit, width: lineSpace.width)
+                    VStack(spacing: 0) {
+                        lights(parts.hour.count == 1 ? " \(parts.hour)" : parts.hour)
+                        lights(parts.minute)
                     }
                 } else {
-                    number(ReadoutFormat.clock(date), in: digitsSpace)
+                    lights(ReadoutFormat.clock(date))
                 }
                 if let period {
-                    label(period, size: labelSize * 0.9)
+                    label(period, size: labelSize * 0.85)
                         .frame(width: periodWidth, alignment: .leading)
+                        .padding(.bottom, labelSize * 0.4)
                 }
             }
 
         case .date:
             if size.width > size.height * 1.3 {
                 // Wide: weekday and month stacked to the right of the day number.
-                let sideWidth = labelSize * 2.6
                 HStack(spacing: 4) {
-                    number(ReadoutFormat.day(date), in: CGSize(width: size.width - sideWidth, height: size.height))
+                    lights(ReadoutFormat.day(date))
                     VStack(alignment: .leading, spacing: 0) {
                         label(ReadoutFormat.shortWeekday(date), size: labelSize)
                         label(ReadoutFormat.shortMonth(date), size: labelSize)
                     }
-                    .frame(width: sideWidth, alignment: .leading)
+                    .frame(width: labelSize * 2.6, alignment: .leading)
                 }
             } else {
                 // Tall: one tight line above the day number.
-                let lineHeight = labelSize * 1.2
                 VStack(spacing: 0) {
                     label("\(ReadoutFormat.shortWeekday(date)) · \(ReadoutFormat.shortMonth(date))", size: labelSize)
-                        .frame(height: lineHeight)
-                    number(ReadoutFormat.day(date), in: CGSize(width: size.width, height: size.height - lineHeight))
+                        .frame(height: labelSize * 1.2)
+                    lights(ReadoutFormat.day(date))
                 }
             }
 
         case .battery:
-            let gaugeHeight = max(6, size.height * 0.09)
-            VStack(spacing: gaugeHeight * 0.6) {
-                number(ReadoutFormat.battery(battery.level), in: CGSize(width: size.width, height: size.height - gaugeHeight * 1.6))
-                BubbleGauge(level: battery.level ?? 0, tint: tint, isCharging: battery.isCharging)
-                    .frame(width: size.width * 0.8, height: gaugeHeight)
+            VStack(spacing: 2) {
+                lights(ReadoutFormat.battery(battery.level))
+                NeonMeter(
+                    level: battery.level ?? 0,
+                    color: tint,
+                    isCharging: battery.isCharging,
+                    phase: phase,
+                    monochrome: !isFullColor,
+                    glidesBetweenSteps: true
+                )
+                .frame(height: max(8, size.height * 0.1))
+                .padding(.horizontal, size.width * 0.08)
+                .widgetAccentable()
             }
         }
     }
 
     // MARK: Pieces
 
-    /// A number sized to fill `space`. Its frame is only as tall as the visible glyphs,
-    /// so neighbors (AM/PM, the battery gauge) sit right against it.
-    private func number(_ text: String, in space: CGSize) -> some View {
-        number(text, fit: BubbleText.Fit(text, in: space), width: space.width)
-    }
-
-    private func number(_ text: String, fit: BubbleText.Fit, width: CGFloat) -> some View {
-        BubbleText(
+    private func lights(_ text: String) -> some View {
+        NeonText(
             text: text,
-            tint: tint,
-            fit: fit,
-            animated: false,
-            flat: renderingMode != .fullColor
+            color: tint,
+            phase: phase,
+            monochrome: !isFullColor,
+            glidesBetweenSteps: true
         )
         .widgetAccentable()
-        .frame(width: width)
     }
 
     private func label(_ text: String, size: CGFloat) -> some View {
         Text(text)
             .font(.system(size: size, weight: .heavy, design: .rounded))
-            .foregroundStyle(renderingMode == .fullColor ? tint.mix(with: .white, by: 0.25) : .primary)
-            .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
+            .foregroundStyle(.primary)
+            .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
             .lineLimit(1)
             .minimumScaleFactor(0.5)
     }
@@ -263,6 +268,7 @@ private let sampleBattery = BatteryReading(level: 0.82, isCharging: true)
     BigWidgetWidgets()
 } timeline: {
     BigWidgetEntry(date: .now, configuration: .timeOnly, battery: sampleBattery)
+    BigWidgetEntry(date: .now.addingTimeInterval(60), configuration: .timeOnly, battery: sampleBattery)
     BigWidgetEntry(date: .now, configuration: .timeAndDate, battery: sampleBattery)
     BigWidgetEntry(date: .now, configuration: .all, battery: sampleBattery)
 }

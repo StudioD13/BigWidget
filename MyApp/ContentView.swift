@@ -5,14 +5,20 @@ import SwiftUI
 struct ContentView: View {
     @State private var battery = BatteryMonitor()
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let spacing: CGFloat = 16
 
     var body: some View {
-        GeometryReader { proxy in
-            TileGroup(spacing: spacing) {
-                arrangement(for: proxy.size)
+        // Continuously move the light coursing through the neon tubes (paused with Reduce Motion).
+        TimelineView(.animation(paused: reduceMotion)) { context in
+            GeometryReader { proxy in
+                TileGroup(spacing: spacing) {
+                    arrangement(for: proxy.size)
+                }
+                .padding(spacing)
             }
-            .padding(spacing)
+            .environment(\.lightPhase, reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate * 0.08)
         }
         #if !os(visionOS)
         .background { LiquidBackground() }

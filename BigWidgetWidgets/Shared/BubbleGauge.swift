@@ -1,1 +1,0 @@
-../../MyApp/Shared/BubbleGauge.swift

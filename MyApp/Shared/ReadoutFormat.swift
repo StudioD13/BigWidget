@@ -58,14 +58,14 @@ enum ReadoutFormat {
     static func batteryTint(_ level: Double?) -> Color {
         guard let level else { return .gray }
         switch level {
-        case ..<0.2: return .red
-        case ..<0.5: return .orange
-        default: return .green
+        case ..<0.2: return NeonColor.red
+        case ..<0.5: return NeonColor.yellow
+        default: return NeonColor.green
         }
     }
 
     // MARK: Tints
 
-    static let timeTint = Color.cyan
-    static let dateTint = Color.pink
+    static let timeTint = NeonColor.blue
+    static let dateTint = NeonColor.red
 }
