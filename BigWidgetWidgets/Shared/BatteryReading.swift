@@ -1,0 +1,1 @@
+../../MyApp/Shared/BatteryReading.swift
