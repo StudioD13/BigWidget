@@ -18,7 +18,7 @@ final class WeatherMonitor {
         guard hasLoaded else { return "Loading Weather…" }
         switch failure {
         case .noLocation: return "Location Off"
-        case .serviceUnavailable: return "Waiting for Apple Weather…"
+        case .serviceUnavailable: return "No Weather Connection"
         case nil: return "Weather Unavailable"
         }
     }

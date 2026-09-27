@@ -109,10 +109,15 @@ struct WeatherWidget: View {
         .accessibilityLabel(reading.map { "\($0.temperature), \($0.condition)" } ?? caption)
     }
 
-    /// WeatherKit requires showing the Apple Weather mark and a link to its legal attribution page.
+    /// Credits whichever service supplied the reading. WeatherKit requires the Apple Weather mark and a
+    /// legal link; Open-Meteo's CC BY 4.0 license requires a credit line.
     @ViewBuilder
     private var attributionView: some View {
-        if let attribution = monitor.attribution {
+        if monitor.reading?.source == .openMeteo {
+            Link("Weather data by Open-Meteo.com", destination: OpenMeteo.attributionURL)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        } else if let attribution = monitor.attribution {
             HStack(spacing: 8) {
                 AsyncImage(url: colorScheme == .dark ? attribution.combinedMarkDarkURL : attribution.combinedMarkLightURL) { image in
                     image.resizable().scaledToFit()
