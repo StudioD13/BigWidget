@@ -39,6 +39,8 @@ struct TileGroup<Content: View>: View {
 extension EnvironmentValues {
     /// Advances continuously in the app to move the light coursing through the neon tubes.
     @Entry var lightPhase: Double = 0
+    /// The neon colors and effect chosen in the app.
+    @Entry var neonStyle = NeonStyle()
 }
 
 /// A big readout: optional small caption, a huge neon value that fills the space, and a footer.
@@ -49,6 +51,7 @@ struct BigReadout<Footer: View>: View {
     @ViewBuilder var footer: Footer
 
     @Environment(\.lightPhase) private var lightPhase
+    @Environment(\.neonStyle) private var neonStyle
 
     var body: some View {
         VStack(spacing: 2) {
@@ -60,7 +63,7 @@ struct BigReadout<Footer: View>: View {
                     .minimumScaleFactor(0.5)
             }
 
-            NeonText(text: value, color: tint, phase: lightPhase)
+            NeonText(text: value, color: tint, style: neonStyle, phase: lightPhase)
 
             footer
         }

@@ -64,6 +64,19 @@ enum ReadoutFormat {
         }
     }
 
+    // MARK: Weather
+
+    /// Classic weather color: blue when cold, green when mild, orange when warm, red when hot.
+    static func weatherTint(celsius: Double?) -> Color {
+        guard let celsius else { return .gray }
+        switch celsius {
+        case ..<5: return NeonColor.blue
+        case ..<18: return NeonColor.green
+        case ..<28: return NeonColor.orange
+        default: return NeonColor.red
+        }
+    }
+
     // MARK: Tints
 
     static let timeTint = NeonColor.blue
