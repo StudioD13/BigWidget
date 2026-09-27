@@ -81,7 +81,7 @@ struct WeatherWidget: View {
     var body: some View {
         let reading = monitor.reading
         let tint = ReadoutFormat.weatherTint(celsius: reading?.celsius)
-        let caption = reading?.condition ?? (monitor.hasLoaded ? "Weather Unavailable" : "Loading Weather…")
+        let caption = reading?.condition ?? monitor.statusText
 
         GlassTile(tint: tint) {
             VStack(spacing: 2) {

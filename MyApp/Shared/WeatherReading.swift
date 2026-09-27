@@ -16,25 +16,38 @@ struct WeatherReading: Sendable, Equatable {
 
     static let sample = WeatherReading(temperature: "72°", celsius: 22, condition: "Partly Cloudy", symbolName: "cloud.sun.fill")
 
-    /// Fetches current conditions for the device's location, or `nil` if location or weather isn't available.
-    static func current() async -> WeatherReading? {
+    /// Why a lookup produced no weather, so the app can say something useful.
+    enum Failure: Error, Sendable, Equatable {
+        /// Location permission is off, or no fix arrived in time.
+        case noLocation
+        /// WeatherKit refused or failed the request (e.g. the app ID isn't activated for WeatherKit yet).
+        case serviceUnavailable
+    }
+
+    /// Fetches current conditions for the device's location.
+    static func fetch() async -> Result<WeatherReading, Failure> {
         guard let location = await LocationFetcher.current() else {
             logger.notice("Weather skipped: no location available")
-            return nil
+            return .failure(.noLocation)
         }
         do {
             let current = try await WeatherService.shared.weather(for: location, including: .current)
             logger.info("Weather loaded: \(current.temperature.formatted(), privacy: .public)")
-            return WeatherReading(
+            return .success(WeatherReading(
                 temperature: format(current.temperature),
                 celsius: current.temperature.converted(to: .celsius).value,
                 condition: current.condition.description,
                 symbolName: current.symbolName
-            )
+            ))
         } catch {
             logger.error("Weather request failed: \(error.localizedDescription, privacy: .public)")
-            return nil
+            return .failure(.serviceUnavailable)
         }
+    }
+
+    /// Current conditions, or `nil` if location or weather isn't available.
+    static func current() async -> WeatherReading? {
+        try? await fetch().get()
     }
 
     private static let logger = Logger(subsystem: "Studio-D.BigWidget", category: "Weather")
