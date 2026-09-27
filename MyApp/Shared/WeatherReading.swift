@@ -8,8 +8,8 @@ import OSLog
 /// Apple Weather (WeatherKit) is tried first. If it refuses — most often because Apple hasn't finished
 /// activating WeatherKit for a new app ID — the same reading comes from Open-Meteo, a free service that
 /// needs no key or account. Apple Weather takes over automatically as soon as it starts answering.
-struct WeatherReading: Sendable, Equatable {
-    enum Source: Sendable, Equatable {
+struct WeatherReading: Sendable, Equatable, Codable {
+    enum Source: String, Sendable, Equatable, Codable {
         case appleWeather, openMeteo
     }
 
@@ -34,12 +34,29 @@ struct WeatherReading: Sendable, Equatable {
         case serviceUnavailable
     }
 
-    /// Fetches current conditions for the device's location.
-    static func fetch() async -> Result<WeatherReading, Failure> {
-        guard let location = await LocationFetcher.current() else {
+    /// Fetches current conditions for the device's location (or the last saved one) and saves the result
+    /// to the App Group, so widgets can show it instantly.
+    static func fetch(locationTimeout: Duration = .seconds(8)) async -> Result<WeatherReading, Failure> {
+        let location: CLLocation
+        if let fresh = await LocationFetcher.current(timeout: locationTimeout) {
+            SharedStore.save(location: fresh)
+            location = fresh
+        } else if let saved = SharedStore.lastLocation {
+            // Widgets often can't get a fresh fix; weather for the last known place is fine.
+            location = saved
+        } else {
             logger.notice("Weather skipped: no location available")
             return .failure(.noLocation)
         }
+
+        let result = await lookUp(at: location)
+        if case .success(let reading) = result {
+            SharedStore.save(weather: reading)
+        }
+        return result
+    }
+
+    private static func lookUp(at location: CLLocation) async -> Result<WeatherReading, Failure> {
         do {
             let current = try await WeatherService.shared.weather(for: location, including: .current)
             logger.notice("Apple Weather loaded: \(current.temperature.formatted(), privacy: .public)")
@@ -64,8 +81,8 @@ struct WeatherReading: Sendable, Equatable {
     }
 
     /// Current conditions, or `nil` if location or weather isn't available.
-    static func current() async -> WeatherReading? {
-        try? await fetch().get()
+    static func current(locationTimeout: Duration = .seconds(8)) async -> WeatherReading? {
+        try? await fetch(locationTimeout: locationTimeout).get()
     }
 
     private static let logger = Logger(subsystem: "Studio-D.BigWidget", category: "Weather")
@@ -104,7 +121,9 @@ enum OpenMeteo {
             URLQueryItem(name: "current", value: "temperature_2m,weather_code,is_day"),
             URLQueryItem(name: "temperature_unit", value: "celsius")
         ]
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 8
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }

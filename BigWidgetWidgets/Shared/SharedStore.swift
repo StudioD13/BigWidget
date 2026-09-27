@@ -1,0 +1,1 @@
+../../MyApp/Shared/SharedStore.swift

@@ -203,9 +203,38 @@ enum NeonEffect: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// How fast the light moves.
+enum NeonSpeed: String, CaseIterable, Codable, Sendable {
+    case slow, normal, fast, turbo
+
+    var title: String {
+        switch self {
+        case .slow: "Slow"
+        case .normal: "Normal"
+        case .fast: "Fast"
+        case .turbo: "Turbo"
+        }
+    }
+
+    /// Multiplier applied to how far the light travels per second (app) or per update (widgets).
+    var multiplier: Double {
+        switch self {
+        case .slow: 0.5
+        case .normal: 1
+        case .fast: 2
+        case .turbo: 4
+        }
+    }
+}
+
 struct NeonStyle: Equatable, Sendable {
     var scheme: NeonScheme = .classic
     var effect: NeonEffect = .coursing
+    var speed: NeonSpeed = .normal
+
+    /// True when every character shares one color and brightness, so a whole number
+    /// can be drawn as a single tube (much cheaper, which matters in widgets).
+    var isUniform: Bool { scheme != .rainbow && effect != .flicker }
 
     /// The tube color for character `index`, given the readout's own color (used by `.classic`).
     func tubeColor(index: Int, readout: Color) -> Color {
@@ -269,12 +298,49 @@ struct NeonText: View {
     var monochrome = false
     /// Animate each step to the next `phase` (for widgets, which update in steps).
     var glidesBetweenSteps = false
+    /// Cheaper glow without blurs, and one tube per number when possible. Widgets use this so
+    /// WidgetKit can render every timeline entry quickly and within its memory limit.
+    var lightweight = false
     var maxStretch: CGFloat = 1.4
 
     var body: some View {
         GeometryReader { proxy in
             let layout = NeonLayout(text: text, in: proxy.size, maxStretch: maxStretch)
-            ZStack {
+            Group {
+                if lightweight && style.isUniform {
+                    combinedTube(layout)
+                } else {
+                    perCharacterTubes(layout)
+                }
+            }
+            .frame(width: layout.size.width, height: layout.size.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+    }
+
+    /// The whole number as one tube: every character shares color and brightness.
+    private func combinedTube(_ layout: NeonLayout) -> some View {
+        let path = layout.glyphs.reduce(into: Path()) { $0.addPath($1.path) }
+        let length = layout.glyphs.reduce(0) { $0 + $1.length }
+        let tube = monochrome ? Color.white : style.tubeColor(index: 0, readout: color)
+        let pulses = style.pulseColors(for: tube)
+        return NeonTube(
+            path: path,
+            width: layout.tubeWidth,
+            color: tube,
+            pulseColors: monochrome && !pulses.isEmpty ? [.white] : pulses,
+            pulseCount: max(1, Int(length / (layout.tubeWidth * 14))),
+            phase: phase,
+            brightness: style.brightness(index: 0, phase: phase),
+            glidesBetweenSteps: glidesBetweenSteps,
+            lightweight: lightweight
+        )
+    }
+
+    private func perCharacterTubes(_ layout: NeonLayout) -> some View {
+        ZStack {
                 ForEach(layout.glyphs.indices, id: \.self) { index in
                     let glyph = layout.glyphs[index]
                     let tube = monochrome ? Color.white : style.tubeColor(index: index, readout: color)
@@ -288,15 +354,11 @@ struct NeonText: View {
                         // Offset each character so pulses don't march in lockstep.
                         phase: phase + Double(index) * 0.31,
                         brightness: style.brightness(index: index, phase: phase),
-                        glidesBetweenSteps: glidesBetweenSteps
+                        glidesBetweenSteps: glidesBetweenSteps,
+                        lightweight: lightweight
                     )
                 }
-            }
-            .frame(width: layout.size.width, height: layout.size.height)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
     }
 }
 
@@ -314,18 +376,18 @@ struct NeonTube: View {
     var glidesBetweenSteps = false
     /// Unlit tubes (e.g. the empty part of the battery meter) show as dark glass only.
     var isLit = true
+    /// Draws the glow as soft stacked strokes instead of blurs (much cheaper, for widgets).
+    var lightweight = false
 
     private var stepAnimation: Animation? {
-        glidesBetweenSteps ? .easeInOut(duration: 1.8) : nil
+        glidesBetweenSteps ? .easeInOut(duration: 1.9) : nil
     }
 
     var body: some View {
         ZStack {
             if isLit {
                 // Glow cast onto whatever is behind the tube.
-                stroke(path, color, width * 2.6)
-                    .blur(radius: width * 1.2)
-                    .opacity(0.6 * brightness)
+                glow(path, color, width * 2.6, opacity: 0.6 * brightness)
             }
 
             // Glass tube wall: a darker rim gives the tube its round, solid body.
@@ -342,8 +404,16 @@ struct NeonTube: View {
             stroke(path, .white.opacity(isLit ? 0.55 : 0.25), width * 0.12)
                 .offset(x: -width * 0.17, y: -width * 0.17)
         }
-        .compositingGroup()
+        .modifier(CompositingIfNeeded(isEnabled: !lightweight))
         .animation(stepAnimation, value: brightness)
+    }
+
+    /// A soft halo behind the tube. One blur per tube; in widgets each number is a single tube
+    /// (see `NeonText.lightweight`), which keeps the number of blurs small.
+    private func glow(_ path: Path, _ color: Color, _ lineWidth: CGFloat, opacity: Double) -> some View {
+        stroke(path, color, lineWidth)
+            .blur(radius: lineWidth * 0.46)
+            .opacity(opacity)
     }
 
     /// Short bright slugs of contrasting color racing along the tube.
@@ -361,7 +431,12 @@ struct NeonTube: View {
             )
             let pulseColor = pulseColors[group]
             ZStack {
-                shape.stroke(pulseColor, style: Self.style(width * 2)).blur(radius: width * 0.9).opacity(0.8)
+                if lightweight {
+                    // Pulses are short, so a plain soft stroke reads as glow without another blur.
+                    shape.stroke(pulseColor.opacity(0.35), style: Self.style(width * 1.5))
+                } else {
+                    shape.stroke(pulseColor, style: Self.style(width * 2)).blur(radius: width * 0.9).opacity(0.8)
+                }
                 shape.stroke(pulseColor, style: Self.style(width * 0.72))
                 shape.stroke(pulseColor.mix(with: .white, by: 0.6), style: Self.style(width * 0.3))
             }
@@ -375,6 +450,15 @@ struct NeonTube: View {
 
     private static func style(_ lineWidth: CGFloat) -> StrokeStyle {
         StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+    }
+}
+
+/// Applies `compositingGroup()` only when asked (it costs an offscreen pass).
+private struct CompositingIfNeeded: ViewModifier {
+    var isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled { content.compositingGroup() } else { content }
     }
 }
 
@@ -420,6 +504,7 @@ struct NeonMeter: View {
     var phase: Double = 0
     var monochrome = false
     var glidesBetweenSteps = false
+    var lightweight = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -434,7 +519,8 @@ struct NeonMeter: View {
             ZStack {
                 NeonTube(
                     path: Path { $0.move(to: split); $0.addLine(to: end) },
-                    width: width, color: tube, pulseColors: [], pulseCount: 0, phase: 0, isLit: false
+                    width: width, color: tube, pulseColors: [], pulseCount: 0, phase: 0, isLit: false,
+                    lightweight: lightweight
                 )
                 if level > 0 {
                     NeonTube(
@@ -445,7 +531,8 @@ struct NeonMeter: View {
                         pulseCount: isCharging ? 3 : 1,
                         phase: phase,
                         brightness: style.brightness(index: 0, phase: phase),
-                        glidesBetweenSteps: glidesBetweenSteps
+                        glidesBetweenSteps: glidesBetweenSteps,
+                        lightweight: lightweight
                     )
                 }
                 if isCharging {

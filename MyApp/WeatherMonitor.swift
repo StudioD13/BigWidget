@@ -26,21 +26,29 @@ final class WeatherMonitor {
     /// Refreshes every 15 minutes, retrying every minute while weather is unavailable,
     /// until the calling task is cancelled.
     func run() async {
+        #if os(macOS)
+        // macOS has no CLServiceSession; ask through a location manager kept alive for the loop.
+        let manager = CLLocationManager()
+        if manager.authorizationStatus == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+        }
+        defer { withExtendedLifetime(manager) {} }
+        #else
         // Holding a service session asks for When In Use location permission (once) and keeps it active.
         let session = CLServiceSession(authorization: .whenInUse)
         defer { session.invalidate() }
+        #endif
 
-        var hadWeather = false
         while !Task.isCancelled {
             switch await WeatherReading.fetch() {
             case .success(let newReading):
+                if newReading != reading {
+                    // The reading is saved to the App Group; refresh widgets so they show it now.
+                    // (Reloads requested by the foreground app don't use the widgets' daily budget.)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
                 reading = newReading
                 failure = nil
-                if !hadWeather {
-                    // First success (e.g. WeatherKit just activated): let widgets refresh too.
-                    WidgetCenter.shared.reloadAllTimelines()
-                    hadWeather = true
-                }
             case .failure(let newFailure):
                 failure = newFailure
             }

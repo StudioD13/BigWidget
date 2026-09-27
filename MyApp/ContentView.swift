@@ -5,12 +5,23 @@ import SwiftUI
 struct ContentView: View {
     @State private var battery = BatteryMonitor()
     @State private var weather = WeatherMonitor()
-    @AppStorage("neonScheme") private var scheme: NeonScheme = .classic
-    @AppStorage("neonEffect") private var effect: NeonEffect = .coursing
+    @State private var showsSettings = false
+
+    @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .classic
+    @AppStorage(SharedStore.Key.effect, store: SharedStore.defaults) private var effect: NeonEffect = .coursing
+    @AppStorage(SharedStore.Key.speed, store: SharedStore.defaults) private var speed: NeonSpeed = .normal
+
+    @AppStorage(AppTile.time.storageKey) private var showTime = true
+    @AppStorage(AppTile.date.storageKey) private var showDate = true
+    @AppStorage(AppTile.weather.storageKey) private var showWeather = true
+    @AppStorage(AppTile.battery.storageKey) private var showBattery = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 16
+
+    /// Base travel of the light per second, scaled by the Speed setting.
+    private static let lightTravelPerSecond = 0.1
 
     var body: some View {
         // Continuously move the light coursing through the neon tubes (paused with Reduce Motion).
@@ -21,10 +32,16 @@ struct ContentView: View {
                 }
                 .padding(spacing)
             }
-            .environment(\.lightPhase, reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate * 0.08)
-            .environment(\.neonStyle, NeonStyle(scheme: scheme, effect: effect))
+            .environment(\.lightPhase, reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate * Self.lightTravelPerSecond * speed.multiplier)
+            .environment(\.neonStyle, NeonStyle(scheme: scheme, effect: effect, speed: speed))
         }
-        .overlay(alignment: .bottomTrailing) { styleMenu }
+        .overlay(alignment: .bottomTrailing) { settingsButton }
+        .sheet(isPresented: $showsSettings) {
+            SettingsView()
+                #if os(macOS)
+                .frame(minWidth: 420, minHeight: 480)
+                #endif
+        }
         #if !os(visionOS)
         .background { LiquidBackground() }
         #endif
@@ -32,56 +49,72 @@ struct ContentView: View {
         .task { await weather.run() }
     }
 
-    /// Lets people play with the neon colors and light effects.
-    private var styleMenu: some View {
-        Menu {
-            Picker("Colors", selection: $scheme) {
-                ForEach(NeonScheme.allCases, id: \.self) { Text($0.title) }
-            }
-            Picker("Effect", selection: $effect) {
-                ForEach(NeonEffect.allCases, id: \.self) { Text($0.title) }
-            }
+    private var settingsButton: some View {
+        Button {
+            showsSettings = true
         } label: {
-            Image(systemName: "paintpalette.fill")
+            Image(systemName: "slider.horizontal.3")
                 .font(.title2)
                 .padding(6)
         }
         .buttonStyle(.glass)
-        .accessibilityLabel("Neon style")
+        .accessibilityLabel("Settings")
+        .keyboardShortcut(",", modifiers: .command)
         .padding(spacing * 1.5)
+    }
+
+    private var visibleTiles: [AppTile] {
+        let shown: [AppTile: Bool] = [.time: showTime, .date: showDate, .weather: showWeather, .battery: showBattery]
+        let tiles = AppTile.allCases.filter { shown[$0] == true }
+        return tiles.isEmpty ? [.time] : tiles
+    }
+
+    @ViewBuilder
+    private func tile(_ tile: AppTile) -> some View {
+        switch tile {
+        case .time: TimeWidget()
+        case .date: DateWidget()
+        case .weather: WeatherWidget(monitor: weather)
+        case .battery: BatteryWidget(monitor: battery)
+        }
+    }
+
+    /// The first tile (usually the clock) gets extra room when there's more than one.
+    private func share(of tile: AppTile, in tiles: [AppTile]) -> CGFloat {
+        guard tiles.count > 1 else { return 1 }
+        let lead: CGFloat = 1.4
+        let total = lead + CGFloat(tiles.count - 1)
+        return (tile == tiles.first ? lead : 1) / total
     }
 
     @ViewBuilder
     private func arrangement(for size: CGSize) -> some View {
+        let tiles = visibleTiles
         let aspect = size.width / max(size.height, 1)
 
         if aspect > 1.6 {
-            // Wide (landscape phone, Mac window): everything in a row, time gets extra room.
-            let usable = size.width - spacing * 5
+            // Wide (landscape phone, Mac window): everything in a row.
+            let usable = size.width - spacing * CGFloat(tiles.count + 1)
             HStack(spacing: spacing) {
-                TimeWidget().frame(width: usable * 0.34)
-                DateWidget().frame(width: usable * 0.22)
-                WeatherWidget(monitor: weather).frame(width: usable * 0.22)
-                BatteryWidget(monitor: battery).frame(width: usable * 0.22)
+                ForEach(tiles) { item in
+                    tile(item).frame(width: usable * share(of: item, in: tiles))
+                }
             }
-        } else if aspect > 0.75 {
-            // Roughly square (unfolded iPhone Duo, iPad): time across the top, three tiles below.
+        } else if aspect > 0.75 && tiles.count > 2 {
+            // Roughly square (unfolded iPhone Duo, iPad): first tile across the top, the rest below.
             VStack(spacing: spacing) {
-                TimeWidget()
+                tile(tiles[0])
                 HStack(spacing: spacing) {
-                    DateWidget()
-                    WeatherWidget(monitor: weather)
-                    BatteryWidget(monitor: battery)
+                    ForEach(tiles.dropFirst()) { tile($0) }
                 }
             }
         } else {
-            // Tall and narrow (folded phone, portrait): stacked, with time getting the biggest share.
-            let usable = size.height - spacing * 5
+            // Tall and narrow (folded phone, portrait): stacked.
+            let usable = size.height - spacing * CGFloat(tiles.count + 1)
             VStack(spacing: spacing) {
-                TimeWidget().frame(height: usable * 0.31)
-                DateWidget().frame(height: usable * 0.23)
-                WeatherWidget(monitor: weather).frame(height: usable * 0.23)
-                BatteryWidget(monitor: battery).frame(height: usable * 0.23)
+                ForEach(tiles) { item in
+                    tile(item).frame(height: usable * share(of: item, in: tiles))
+                }
             }
         }
     }

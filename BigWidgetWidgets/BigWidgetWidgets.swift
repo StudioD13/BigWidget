@@ -6,29 +6,41 @@ import SwiftUI
 struct BigWidgetEntry: TimelineEntry {
     let date: Date
     let configuration: ConfigurationAppIntent
+    /// Resolved when the timeline is built (the app's shared style or the widget's own).
+    let style: NeonStyle
     let battery: BatteryReading
     var weather: WeatherReading?
 }
 
+/// Builds timelines fast: WidgetKit waits for this whenever a widget is added, edited, or reloaded,
+/// so slow work here is what made preference changes lag or never appear.
 struct Provider: AppIntentTimelineProvider {
+    /// A saved reading younger than this is used as-is, with no network or location lookup.
+    private static let weatherFreshness: TimeInterval = 15 * 60
+
     func placeholder(in context: Context) -> BigWidgetEntry {
-        BigWidgetEntry(date: .now, configuration: ConfigurationAppIntent(), battery: BatteryReading(level: 0.82), weather: .sample)
+        BigWidgetEntry(
+            date: .now, configuration: ConfigurationAppIntent(), style: NeonStyle(),
+            battery: BatteryReading(level: 0.82), weather: .sample
+        )
     }
 
     func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> BigWidgetEntry {
+        // Snapshots (the widget gallery, the edit sheet) must be instant: saved data only.
         let battery = await BatteryReading.current()
-        // The widget gallery shows a sample value when the device reports no battery.
-        let shown = context.isPreview && battery.level == nil ? BatteryReading(level: 0.82) : battery
-        let weather = configuration.showWeather ? await WeatherReading.current() : nil
+        let shownBattery = context.isPreview && battery.level == nil ? BatteryReading(level: 0.82) : battery
+        var weather = configuration.showWeather ? SharedStore.cachedWeather?.reading : nil
+        if configuration.showWeather && weather == nil && context.isPreview { weather = .sample }
         return BigWidgetEntry(
-            date: .now, configuration: configuration, battery: shown,
-            weather: weather ?? (context.isPreview ? .sample : nil)
+            date: .now, configuration: configuration, style: configuration.style,
+            battery: shownBattery, weather: weather
         )
     }
 
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<BigWidgetEntry> {
         let battery = await BatteryReading.current()
-        let weather = configuration.showWeather ? await WeatherReading.current() : nil
+        let weather = configuration.showWeather ? await currentWeather() : nil
+        let style = configuration.style
 
         // One entry per minute for the next hour keeps the clock ticking; then WidgetKit asks again
         // (which also refreshes the battery and weather readings).
@@ -36,9 +48,20 @@ struct Provider: AppIntentTimelineProvider {
         let startOfMinute = calendar.dateInterval(of: .minute, for: .now)?.start ?? .now
         let entries = (0..<60).compactMap { offset -> BigWidgetEntry? in
             guard let date = calendar.date(byAdding: .minute, value: offset, to: startOfMinute) else { return nil }
-            return BigWidgetEntry(date: date, configuration: configuration, battery: battery, weather: weather)
+            return BigWidgetEntry(
+                date: date, configuration: configuration, style: style, battery: battery, weather: weather
+            )
         }
         return Timeline(entries: entries, policy: .atEnd)
+    }
+
+    /// Saved weather if it's recent; otherwise a quick fresh lookup, falling back to the saved reading.
+    private func currentWeather() async -> WeatherReading? {
+        let cached = SharedStore.cachedWeather
+        if let cached, Date.now.timeIntervalSince(cached.date) < Self.weatherFreshness {
+            return cached.reading
+        }
+        return await WeatherReading.current(locationTimeout: .seconds(3)) ?? cached?.reading
     }
 }
 
@@ -131,7 +154,7 @@ struct BigWidgetEntryView: View {
             date: entry.date,
             battery: entry.battery,
             weather: entry.weather,
-            style: entry.configuration.style
+            style: entry.style
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -153,7 +176,7 @@ struct ReadoutCell: View {
     /// Widgets can't animate continuously, so the light coursing through the tubes advances once per
     /// timeline entry (each minute) and glides to its new spot — a brief light show as the minute changes.
     private var phase: Double {
-        (date.timeIntervalSinceReferenceDate / 60).rounded(.down) * 0.137
+        (date.timeIntervalSinceReferenceDate / 60).rounded(.down) * 0.137 * style.speed.multiplier
     }
 
     private var isFullColor: Bool { renderingMode == .fullColor }
@@ -227,7 +250,8 @@ struct ReadoutCell: View {
                     style: style,
                     phase: phase,
                     monochrome: !isFullColor,
-                    glidesBetweenSteps: true
+                    glidesBetweenSteps: true,
+                    lightweight: true
                 )
                 .frame(height: max(8, size.height * 0.1))
                 .padding(.horizontal, size.width * 0.08)
@@ -282,7 +306,8 @@ struct ReadoutCell: View {
             style: style,
             phase: phase,
             monochrome: !isFullColor,
-            glidesBetweenSteps: true
+            glidesBetweenSteps: true,
+            lightweight: true
         )
         .widgetAccentable()
     }
@@ -327,34 +352,41 @@ struct ReadoutCell: View {
 
 extension ConfigurationAppIntent {
     fileprivate static let timeOnly = ConfigurationAppIntent(time: true, date: false, battery: false)
-    fileprivate static let timeAndDate = ConfigurationAppIntent(time: true, date: true, battery: false, scheme: .rainbow, effect: .sparkle)
+    fileprivate static let timeAndDate = ConfigurationAppIntent(time: true, date: true, battery: false)
     fileprivate static let all = ConfigurationAppIntent(time: true, date: true, battery: true, weather: true)
-    fileprivate static let weatherOnly = ConfigurationAppIntent(time: false, date: false, battery: false, weather: true, scheme: .purple, effect: .spectrum)
+    fileprivate static let weatherOnly = ConfigurationAppIntent(time: false, date: false, battery: false, weather: true)
 }
 
 private let sampleBattery = BatteryReading(level: 0.82, isCharging: true)
 
+private let previewStyles: [String: NeonStyle] = [
+    "timeOnly": NeonStyle(scheme: .classic, effect: .coursing),
+    "timeAndDate": NeonStyle(scheme: .rainbow, effect: .sparkle),
+    "all": NeonStyle(scheme: .classic, effect: .coursing, speed: .fast),
+    "weatherOnly": NeonStyle(scheme: .purple, effect: .spectrum)
+]
+
 #Preview("Small", as: .systemSmall) {
     BigWidgetWidgets()
 } timeline: {
-    BigWidgetEntry(date: .now, configuration: .weatherOnly, battery: sampleBattery, weather: .sample)
-    BigWidgetEntry(date: .now, configuration: .timeOnly, battery: sampleBattery)
-    BigWidgetEntry(date: .now.addingTimeInterval(60), configuration: .timeOnly, battery: sampleBattery)
-    BigWidgetEntry(date: .now, configuration: .timeAndDate, battery: sampleBattery)
-    BigWidgetEntry(date: .now, configuration: .all, battery: sampleBattery, weather: .sample)
+    BigWidgetEntry(date: .now, configuration: .weatherOnly, style: previewStyles["weatherOnly"]!, battery: sampleBattery, weather: .sample)
+    BigWidgetEntry(date: .now, configuration: .timeOnly, style: previewStyles["timeOnly"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now.addingTimeInterval(60), configuration: .timeOnly, style: previewStyles["timeOnly"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, configuration: .timeAndDate, style: previewStyles["timeAndDate"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, configuration: .all, style: previewStyles["all"]!, battery: sampleBattery, weather: .sample)
 }
 
 #Preview("Medium", as: .systemMedium) {
     BigWidgetWidgets()
 } timeline: {
-    BigWidgetEntry(date: .now, configuration: .timeOnly, battery: sampleBattery)
-    BigWidgetEntry(date: .now, configuration: .timeAndDate, battery: sampleBattery)
-    BigWidgetEntry(date: .now, configuration: .all, battery: sampleBattery, weather: .sample)
+    BigWidgetEntry(date: .now, configuration: .timeOnly, style: previewStyles["timeOnly"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, configuration: .timeAndDate, style: previewStyles["timeAndDate"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, configuration: .all, style: previewStyles["all"]!, battery: sampleBattery, weather: .sample)
 }
 
 #Preview("Large", as: .systemLarge) {
     BigWidgetWidgets()
 } timeline: {
-    BigWidgetEntry(date: .now, configuration: .timeAndDate, battery: sampleBattery)
-    BigWidgetEntry(date: .now, configuration: .all, battery: sampleBattery, weather: .sample)
+    BigWidgetEntry(date: .now, configuration: .timeAndDate, style: previewStyles["timeAndDate"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, configuration: .all, style: previewStyles["all"]!, battery: sampleBattery, weather: .sample)
 }
