@@ -6,6 +6,8 @@ import SwiftUI
             ContentView()
                 #if os(macOS)
                 .frame(minWidth: 360, minHeight: 360)
+                // Translucent window: the desktop shows through behind the tiles.
+                .containerBackground(.ultraThinMaterial, for: .window)
                 #endif
         }
         #if os(visionOS)

@@ -9,6 +9,14 @@ enum ReadoutFormat {
         date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)).minute(.twoDigits))
     }
 
+    /// Hours and minutes separately, for a stacked two-line clock (e.g. "9" over "05").
+    static func clockParts(_ date: Date) -> (hour: String, minute: String) {
+        (
+            date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted))),
+            date.formatted(.dateTime.minute(.twoDigits))
+        )
+    }
+
     /// "AM"/"PM" when the current locale uses a 12-hour clock, otherwise `nil`.
     static func period(_ date: Date) -> String? {
         let pattern = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
@@ -34,6 +42,10 @@ enum ReadoutFormat {
 
     static func month(_ date: Date) -> String {
         date.formatted(.dateTime.month(.wide)).uppercased()
+    }
+
+    static func shortMonth(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated)).uppercased()
     }
 
     // MARK: Battery

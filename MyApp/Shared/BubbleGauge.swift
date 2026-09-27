@@ -10,7 +10,7 @@ struct BubbleGauge: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.black.opacity(0.15).shadow(.inner(color: .black.opacity(0.35), radius: 3, y: 2)))
+                    .fill(Color.primary.opacity(0.15).shadow(.inner(color: .black.opacity(0.35), radius: 3, y: 2)))
 
                 Capsule()
                     .fill(

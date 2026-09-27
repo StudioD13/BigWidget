@@ -7,11 +7,12 @@ struct TimeWidget: View {
         TimelineView(.everyMinute) { context in
             let date = context.date
             GlassTile(tint: ReadoutFormat.timeTint) {
-                BigReadout(caption: "TIME", value: ReadoutFormat.clock(date), tint: ReadoutFormat.timeTint) {
+                // No caption: a clock is self-explanatory.
+                BigReadout(caption: nil, value: ReadoutFormat.clock(date), tint: ReadoutFormat.timeTint) {
                     if let period = ReadoutFormat.period(date) {
                         Text(period)
-                            .font(.system(.title2, design: .rounded, weight: .black))
-                            .foregroundStyle(.primary.opacity(0.8))
+                            .font(.system(.headline, design: .rounded, weight: .heavy))
+                            .foregroundStyle(ReadoutFormat.timeTint.mix(with: .primary, by: 0.35))
                     }
                 }
             }
@@ -29,15 +30,11 @@ struct DateWidget: View {
             let date = context.date
             GlassTile(tint: ReadoutFormat.dateTint) {
                 BigReadout(
-                    caption: ReadoutFormat.weekday(date),
+                    caption: "\(ReadoutFormat.shortWeekday(date)) · \(ReadoutFormat.month(date))",
                     value: ReadoutFormat.day(date),
                     tint: ReadoutFormat.dateTint
                 ) {
-                    Text(ReadoutFormat.month(date))
-                        .font(.system(.title2, design: .rounded, weight: .black))
-                        .foregroundStyle(.primary.opacity(0.8))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                    EmptyView()
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -56,10 +53,12 @@ struct BatteryWidget: View {
         let valueText = ReadoutFormat.battery(monitor.level)
 
         GlassTile(tint: tint) {
-            BigReadout(caption: monitor.isCharging ? "CHARGING" : "BATTERY", value: valueText, tint: tint) {
+            // The % sign and gauge say "battery"; no caption needed.
+            BigReadout(caption: nil, value: valueText, tint: tint) {
                 BubbleGauge(level: monitor.level ?? 0, tint: tint, isCharging: monitor.isCharging)
-                    .frame(height: 28)
-                    .padding(.horizontal, 12)
+                    .frame(height: 16)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 4)
             }
         }
         .accessibilityElement(children: .ignore)

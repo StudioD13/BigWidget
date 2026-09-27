@@ -44,11 +44,13 @@ struct BigWidgetWidgets: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
             BigWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
+                // Transparent: the bubbly numbers float right on the wallpaper.
+                .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("BigWidget")
         .description("Huge, bubbly time, date, and battery. Pick one, two, or all three.")
         .supportedFamilies(Self.families)
+        .contentMarginsDisabled()
     }
 
     private static var families: [WidgetFamily] {
@@ -67,54 +69,52 @@ struct BigWidgetEntryView: View {
 
     @Environment(\.widgetFamily) private var family
 
-    private let spacing: CGFloat = 8
+    private let spacing: CGFloat = 4
 
     var body: some View {
         let readouts = entry.configuration.readouts
-        let paneled = readouts.count > 1
 
-        switch (readouts.count, family) {
-        case (1, _):
-            cell(readouts[0], paneled: false)
+        Group {
+            switch (readouts.count, family) {
+            case (1, _):
+                cell(readouts[0])
 
-        case (_, .systemSmall), (2, .systemLarge):
-            // Stack vertically when the widget is squarish or tall.
-            VStack(spacing: spacing) {
-                ForEach(readouts, id: \.self) { cell($0, paneled: paneled) }
-            }
+            case (_, .systemSmall), (2, .systemLarge):
+                // Stack vertically when the widget is squarish or tall.
+                VStack(spacing: spacing) {
+                    ForEach(readouts, id: \.self) { cell($0) }
+                }
 
-        case (3, .systemLarge):
-            // First readout across the top, the other two side by side.
-            VStack(spacing: spacing) {
-                cell(readouts[0], paneled: true)
-                HStack(spacing: spacing) {
-                    cell(readouts[1], paneled: true)
-                    cell(readouts[2], paneled: true)
+            case (3, .systemLarge):
+                // First readout across the top, the other two side by side.
+                VStack(spacing: spacing) {
+                    cell(readouts[0])
+                    HStack(spacing: spacing * 3) {
+                        cell(readouts[1])
+                        cell(readouts[2])
+                    }
+                }
+
+            default:
+                // Medium and extra large are wide: side by side.
+                HStack(spacing: spacing * 3) {
+                    ForEach(readouts, id: \.self) { cell($0) }
                 }
             }
-
-        default:
-            // Medium and extra large are wide: side by side.
-            HStack(spacing: spacing) {
-                ForEach(readouts, id: \.self) { cell($0, paneled: paneled) }
-            }
         }
+        .padding(10)
     }
 
-    private func cell(_ readout: Readout, paneled: Bool) -> some View {
+    private func cell(_ readout: Readout) -> some View {
         ReadoutCell(readout: readout, date: entry.date, battery: entry.battery)
-            .padding(paneled ? 6 : 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                if paneled { GlassPanel() }
-            }
     }
 }
 
 // MARK: - Cell
 
-/// One readout: optional caption, huge bubbly value, optional footer.
-/// Captions and footers drop away automatically when the cell is too small, so the number stays big.
+/// One readout, sized so the number fills nearly all of its space.
+/// Small labels sit beside the number when the cell is wide, or tight above it when it's tall.
 struct ReadoutCell: View {
     var readout: Readout
     var date: Date
@@ -124,89 +124,108 @@ struct ReadoutCell: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let roomy = proxy.size.height > 96
-            let labelSize = min(max(proxy.size.height * 0.1, 11), 22)
+            let size = proxy.size
+            let labelSize = min(max(size.height * 0.13, 10), 26)
 
-            VStack(spacing: 0) {
-                if roomy {
-                    label(caption(narrow: proxy.size.width < 150), size: labelSize)
-                }
-
-                GeometryReader { valueProxy in
-                    value(size: BubbleText.fittingSize(for: valueText, in: valueProxy.size))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-
-                if roomy {
-                    footer(labelSize: labelSize)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content(in: size, labelSize: labelSize)
+                .frame(width: size.width, height: size.height)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
 
+    @ViewBuilder
+    private func content(in size: CGSize, labelSize: CGFloat) -> some View {
+        switch readout {
+        case .time:
+            // No "TIME" label — a clock is self-explanatory. AM/PM tucks in at the digits' bottom corner.
+            let period = ReadoutFormat.period(date)
+            let periodWidth = period == nil ? 0 : labelSize * 1.7
+            let digitsSpace = CGSize(width: size.width - periodWidth, height: size.height)
+
+            HStack(alignment: .bottom, spacing: 2) {
+                if size.width < size.height * 1.4 {
+                    // Squarish or tall: stack hours over minutes so the digits fill the space.
+                    let parts = ReadoutFormat.clockParts(date)
+                    let gap = size.height * 0.03
+                    let lineSpace = CGSize(width: digitsSpace.width, height: (digitsSpace.height - gap) / 2)
+                    // Size both lines as two digits so they match even when the hour is one digit.
+                    let fit = BubbleText.Fit("00", in: lineSpace)
+                    VStack(spacing: gap) {
+                        number(parts.hour, fit: fit, width: lineSpace.width)
+                        number(parts.minute, fit: fit, width: lineSpace.width)
+                    }
+                } else {
+                    number(ReadoutFormat.clock(date), in: digitsSpace)
+                }
+                if let period {
+                    label(period, size: labelSize * 0.9)
+                        .frame(width: periodWidth, alignment: .leading)
+                }
+            }
+
+        case .date:
+            if size.width > size.height * 1.3 {
+                // Wide: weekday and month stacked to the right of the day number.
+                let sideWidth = labelSize * 2.6
+                HStack(spacing: 4) {
+                    number(ReadoutFormat.day(date), in: CGSize(width: size.width - sideWidth, height: size.height))
+                    VStack(alignment: .leading, spacing: 0) {
+                        label(ReadoutFormat.shortWeekday(date), size: labelSize)
+                        label(ReadoutFormat.shortMonth(date), size: labelSize)
+                    }
+                    .frame(width: sideWidth, alignment: .leading)
+                }
+            } else {
+                // Tall: one tight line above the day number.
+                let lineHeight = labelSize * 1.2
+                VStack(spacing: 0) {
+                    label("\(ReadoutFormat.shortWeekday(date)) · \(ReadoutFormat.shortMonth(date))", size: labelSize)
+                        .frame(height: lineHeight)
+                    number(ReadoutFormat.day(date), in: CGSize(width: size.width, height: size.height - lineHeight))
+                }
+            }
+
+        case .battery:
+            let gaugeHeight = max(6, size.height * 0.09)
+            VStack(spacing: gaugeHeight * 0.6) {
+                number(ReadoutFormat.battery(battery.level), in: CGSize(width: size.width, height: size.height - gaugeHeight * 1.6))
+                BubbleGauge(level: battery.level ?? 0, tint: tint, isCharging: battery.isCharging)
+                    .frame(width: size.width * 0.8, height: gaugeHeight)
+            }
+        }
+    }
+
     // MARK: Pieces
 
-    @ViewBuilder
-    private func value(size: CGFloat) -> some View {
-        if renderingMode == .fullColor {
-            BubbleText(text: valueText, tint: tint, size: size, animated: false)
-        } else {
-            // Tinted/clear Home Screen styles flatten colors, so use a clean heavy numeral instead.
-            Text(valueText)
-                .font(.system(size: size, weight: .black, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .fixedSize()
-                .contentTransition(.numericText())
-                .widgetAccentable()
-        }
+    /// A number sized to fill `space`. Its frame is only as tall as the visible glyphs,
+    /// so neighbors (AM/PM, the battery gauge) sit right against it.
+    private func number(_ text: String, in space: CGSize) -> some View {
+        number(text, fit: BubbleText.Fit(text, in: space), width: space.width)
+    }
+
+    private func number(_ text: String, fit: BubbleText.Fit, width: CGFloat) -> some View {
+        BubbleText(
+            text: text,
+            tint: tint,
+            fit: fit,
+            animated: false,
+            flat: renderingMode != .fullColor
+        )
+        .widgetAccentable()
+        .frame(width: width)
     }
 
     private func label(_ text: String, size: CGFloat) -> some View {
         Text(text)
             .font(.system(size: size, weight: .heavy, design: .rounded))
-            .foregroundStyle(.primary.opacity(0.85))
+            .foregroundStyle(renderingMode == .fullColor ? tint.mix(with: .white, by: 0.25) : .primary)
+            .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
             .lineLimit(1)
-            .minimumScaleFactor(0.6)
-    }
-
-    @ViewBuilder
-    private func footer(labelSize: CGFloat) -> some View {
-        switch readout {
-        case .time:
-            if let period = ReadoutFormat.period(date) {
-                label(period, size: labelSize)
-            }
-        case .date:
-            label(ReadoutFormat.month(date), size: labelSize)
-        case .battery:
-            BubbleGauge(level: battery.level ?? 0, tint: tint, isCharging: battery.isCharging)
-                .frame(height: labelSize * 0.8)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 2)
-        }
+            .minimumScaleFactor(0.5)
     }
 
     // MARK: Content
-
-    private var valueText: String {
-        switch readout {
-        case .time: ReadoutFormat.clock(date)
-        case .date: ReadoutFormat.day(date)
-        case .battery: ReadoutFormat.battery(battery.level)
-        }
-    }
-
-    private func caption(narrow: Bool) -> String {
-        switch readout {
-        case .time: "TIME"
-        case .date: narrow ? ReadoutFormat.shortWeekday(date) : ReadoutFormat.weekday(date)
-        case .battery: battery.isCharging ? "CHARGING" : "BATTERY"
-        }
-    }
 
     private var tint: Color {
         switch readout {
@@ -225,51 +244,8 @@ struct ReadoutCell: View {
         case .battery:
             battery.level == nil
                 ? "Battery level unavailable"
-                : "Battery \(valueText)\(battery.isCharging ? ", charging" : "")"
+                : "Battery \(ReadoutFormat.battery(battery.level))\(battery.isCharging ? ", charging" : "")"
         }
-    }
-}
-
-// MARK: - Styling
-
-/// A frosted, glass-like pane behind each readout when a widget shows more than one.
-struct GlassPanel: View {
-    @Environment(\.widgetRenderingMode) private var renderingMode
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-        shape
-            .fill(.white.opacity(renderingMode == .fullColor ? 0.18 : 0.08))
-            .overlay {
-                shape.strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.1)], startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1
-                )
-            }
-    }
-}
-
-/// A still version of the app's colorful mesh, for the widget background.
-struct WidgetBackdrop: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        MeshGradient(
-            width: 3,
-            height: 3,
-            points: [
-                [0, 0], [0.55, 0], [1, 0],
-                [0, 0.45], [0.5, 0.55], [1, 0.4],
-                [0, 1], [0.45, 1], [1, 1]
-            ],
-            colors: colorScheme == .dark
-                ? [.indigo, .purple, .blue,
-                   .teal, .pink.mix(with: .black, by: 0.3), .indigo,
-                   .blue, .mint.mix(with: .black, by: 0.4), .purple]
-                : [.cyan, .pink.opacity(0.8), .orange.opacity(0.8),
-                   .mint, .yellow.opacity(0.7), .pink,
-                   .blue.opacity(0.7), .teal, .purple.opacity(0.7)]
-        )
     }
 }
 
