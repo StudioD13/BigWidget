@@ -57,6 +57,9 @@ struct WeatherReading: Sendable, Equatable, Codable {
     }
 
     private static func lookUp(at location: CLLocation) async -> Result<WeatherReading, Failure> {
+        // Only Apple Weather (WeatherKit) is used, so the readout always mirrors the system Weather app.
+        // If WeatherKit refuses, the app reports "unavailable" rather than showing a number from another
+        // service that wouldn't match the system.
         do {
             let current = try await WeatherService.shared.weather(for: location, including: .current)
             logger.notice("Apple Weather loaded: \(current.temperature.formatted(), privacy: .public)")
@@ -68,14 +71,7 @@ struct WeatherReading: Sendable, Equatable, Codable {
                 source: .appleWeather
             ))
         } catch {
-            logger.error("Apple Weather failed, trying Open-Meteo: \(error.localizedDescription, privacy: .public)")
-        }
-        do {
-            let reading = try await OpenMeteo.current(at: location.coordinate)
-            logger.notice("Open-Meteo loaded: \(reading.temperature, privacy: .public)")
-            return .success(reading)
-        } catch {
-            logger.error("Open-Meteo failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Apple Weather failed: \(error.localizedDescription, privacy: .public)")
             return .failure(.serviceUnavailable)
         }
     }

@@ -64,6 +64,24 @@ struct DisplayText: View {
     var lightweight = false
 
     var body: some View {
+        // A soft dark halo keeps light-colored schemes (e.g. White or Yellow) legible on light or
+        // clear backgrounds, where the glyphs would otherwise blend in and look blank. It's invisible
+        // on dark backgrounds, and skipped in monochrome (accented/vibrant) rendering, where the
+        // system supplies its own contrast.
+        if monochrome {
+            glyphs
+        } else {
+            GeometryReader { proxy in
+                let radius = max(1, proxy.size.height * 0.018)
+                glyphs
+                    .shadow(color: .black.opacity(0.5), radius: radius)
+                    .shadow(color: .black.opacity(0.4), radius: radius)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var glyphs: some View {
         switch style.numbers {
         case .neon:
             NeonText(
