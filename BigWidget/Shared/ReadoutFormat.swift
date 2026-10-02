@@ -9,14 +9,6 @@ enum ReadoutFormat {
         date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)).minute(.twoDigits))
     }
 
-    /// Hours and minutes separately, for a stacked two-line clock (e.g. "9" over "05").
-    static func clockParts(_ date: Date) -> (hour: String, minute: String) {
-        (
-            date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted))),
-            date.formatted(.dateTime.minute(.twoDigits))
-        )
-    }
-
     /// "AM"/"PM" when the current locale uses a 12-hour clock, otherwise `nil`.
     static func period(_ date: Date) -> String? {
         let pattern = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
@@ -52,7 +44,10 @@ enum ReadoutFormat {
 
     static func battery(_ level: Double?) -> String {
         guard let level else { return "--" }
-        return "\(Int((level * 100).rounded()))%"
+        // Truncated, not rounded: Settings and Control Center only turn over to the next percent
+        // once the battery has actually reached it, so rounding up early (e.g. 94.6% → "95%") reads
+        // as wrong next to them.
+        return "\(Int(level * 100))%"
     }
 
     static func batteryTint(_ level: Double?) -> Color {

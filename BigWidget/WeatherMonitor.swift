@@ -23,8 +23,9 @@ final class WeatherMonitor {
         }
     }
 
-    /// Refreshes every 15 minutes, retrying every minute while weather is unavailable,
-    /// until the calling task is cancelled.
+    /// Refreshes every minute until the calling task is cancelled.
+    /// (Was every 15 minutes; shortened for now because readings were drifting several degrees
+    /// stale between refreshes.)
     func run() async {
         #if os(macOS)
         // macOS has no CLServiceSession; ask through a location manager kept alive for the loop.
@@ -57,7 +58,7 @@ final class WeatherMonitor {
             if attribution == nil {
                 attribution = try? await WeatherService.shared.attribution
             }
-            try? await Task.sleep(for: .seconds(reading == nil ? 60 : 15 * 60))
+            try? await Task.sleep(for: .seconds(reading == nil ? 20 : 60))
         }
     }
 }

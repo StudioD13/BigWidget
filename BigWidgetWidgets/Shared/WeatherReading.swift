@@ -1,1 +1,1 @@
-../../MyApp/Shared/WeatherReading.swift
+../../BigWidget/Shared/WeatherReading.swift

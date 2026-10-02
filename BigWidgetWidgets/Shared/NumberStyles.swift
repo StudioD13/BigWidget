@@ -1,1 +1,1 @@
-../../MyApp/Shared/NumberStyles.swift
+../../BigWidget/Shared/NumberStyles.swift

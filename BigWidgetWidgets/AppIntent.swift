@@ -15,49 +15,76 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     @Parameter(title: "Battery", default: false)
     var showBattery: Bool
 
-    @Parameter(title: "Weather", default: false)
+    @Parameter(title: "Weather", default: true)
     var showWeather: Bool
 
-    /// On: use the colors, effect, and speed chosen in the BigWidget app (changes apply instantly).
-    @Parameter(title: "Match App Style", default: true)
+    /// On: show the readouts and look chosen in the BigWidget app (changes apply instantly).
+    /// (Named for when it covered only the look; the name is saved in people's widgets.)
+    @Parameter(title: "Match App", default: true)
     var matchAppStyle: Bool
 
-    @Parameter(title: "Numbers", default: .neon)
+    /// On: a new random combination of Numbers, Colors, Bloom, and Thickness every minute,
+    /// same as the app's own Random option.
+    @Parameter(title: "Random", default: false)
+    var isRandom: Bool
+
+    @Parameter(title: "Numbers", default: .normal)
     var numbers: NumberStyle
 
     @Parameter(title: "Colors", default: .classic)
     var scheme: NeonScheme
 
-    @Parameter(title: "Effect", default: .coursing)
-    var effect: NeonEffect
-
-    @Parameter(title: "Speed", default: .normal)
-    var speed: NeonSpeed
-
     @Parameter(title: "Bloom", default: .soft)
     var bloom: NeonBloom
 
+    @Parameter(title: "Thickness", default: .regular)
+    var thickness: NumberThickness
+
     static var parameterSummary: some ParameterSummary {
         When(\.$matchAppStyle, .equalTo, true) {
+            // Everything comes from the app, so there's nothing else to choose.
             Summary {
-                \.$showTime
-                \.$showDate
-                \.$showBattery
-                \.$showWeather
                 \.$matchAppStyle
             }
         } otherwise: {
-            Summary {
-                \.$showTime
-                \.$showDate
-                \.$showBattery
-                \.$showWeather
-                \.$matchAppStyle
-                \.$numbers
-                \.$scheme
-                \.$effect
-                \.$speed
-                \.$bloom
+            When(\.$isRandom, .equalTo, true) {
+                // While Random is on, there's no fixed look to choose.
+                Summary {
+                    \.$showTime
+                    \.$showDate
+                    \.$showBattery
+                    \.$showWeather
+                    \.$matchAppStyle
+                    \.$isRandom
+                }
+            } otherwise: {
+                // Chalk doesn't glow, so Bloom is hidden for it.
+                When(\.$numbers, .equalTo, .chalk) {
+                    Summary {
+                        \.$showTime
+                        \.$showDate
+                        \.$showBattery
+                        \.$showWeather
+                        \.$matchAppStyle
+                        \.$isRandom
+                        \.$numbers
+                        \.$thickness
+                        \.$scheme
+                    }
+                } otherwise: {
+                    Summary {
+                        \.$showTime
+                        \.$showDate
+                        \.$showBattery
+                        \.$showWeather
+                        \.$matchAppStyle
+                        \.$isRandom
+                        \.$numbers
+                        \.$thickness
+                        \.$scheme
+                        \.$bloom
+                    }
+                }
             }
         }
     }
@@ -73,33 +100,54 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
         showBattery = battery
         showWeather = weather
         matchAppStyle = style == nil
+        isRandom = false
         scheme = style?.scheme ?? .classic
-        effect = style?.effect ?? .coursing
-        speed = style?.speed ?? .normal
-        numbers = style?.numbers ?? .neon
+        numbers = style?.numbers ?? .normal
         bloom = style?.bloom ?? .soft
+        thickness = style?.thickness ?? .regular
     }
 
-    /// The readouts to show, in display order. Falls back to Time if everything is switched off.
+    /// The readouts to show, in display order: the app's (from the shared App Group) or this widget's own.
+    /// Falls back to Time if everything is switched off.
     var readouts: [Readout] {
-        var result: [Readout] = []
-        if showTime { result.append(.time) }
-        if showDate { result.append(.date) }
-        if showBattery { result.append(.battery) }
-        if showWeather { result.append(.weather) }
+        let shown: [(Readout, Bool)] = matchAppStyle
+            ? Readout.allCases.map { ($0, SharedStore.showsInApp($0.rawValue)) }
+            : [(.time, showTime), (.date, showDate), (.battery, showBattery), (.weather, showWeather)]
+        let result = shown.filter(\.1).map(\.0)
         return result.isEmpty ? [.time] : result
     }
 
-    /// The style to draw with: the app's (from the shared App Group) or this widget's own.
-    var style: NeonStyle {
-        matchAppStyle
-            ? SharedStore.appStyle
-            : NeonStyle(scheme: scheme, effect: effect, speed: speed, numbers: numbers, bloom: bloom)
+    /// The style to draw `readout` with at `date`: the app's (from the shared App Group) or this
+    /// widget's own, each falling back to a random combination — from the same minute-and-element-
+    /// seeded source the app uses — when Random is on, so each readout gets its own independent
+    /// combination instead of all of them sharing one. Taking a date (rather than always `.now`)
+    /// lets a widget's precomputed, once-an-hour timeline give each minute's entry its own distinct
+    /// random look.
+    func style(for readout: Readout, at date: Date) -> NeonStyle {
+        if matchAppStyle {
+            return SharedStore.isRandom ? .random(for: date, element: readout.randomSeed) : SharedStore.appStyle
+        }
+        return isRandom
+            ? .random(for: date, element: readout.randomSeed)
+            : NeonStyle(scheme: scheme, numbers: numbers, bloom: bloom, thickness: thickness)
     }
 }
 
-enum Readout: Hashable {
+/// Raw values match the app's readout switches in the App Group (see `SharedStore.showsInApp`).
+enum Readout: String, Hashable, Codable, CaseIterable {
     case time, date, battery, weather
+
+    /// A stable per-readout number, so Random can give each one its own independent combination.
+    /// Matches `AppTile.randomSeed` in the app, so a readout picks the same look whichever side
+    /// computes it.
+    var randomSeed: Int {
+        switch self {
+        case .time: 0
+        case .date: 1
+        case .weather: 2
+        case .battery: 3
+        }
+    }
 }
 
 // Raw values are saved in people's widget configurations, so never rename existing cases.
@@ -115,21 +163,20 @@ extension NeonScheme: AppEnum {
             .green: "Green",
             .blue: "Blue",
             .purple: "Purple",
-            .white: "White"
-        ]
-    }
-}
-
-extension NeonEffect: AppEnum {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Effect" }
-    static var caseDisplayRepresentations: [NeonEffect: DisplayRepresentation] {
-        [
-            .coursing: "Coursing",
-            .sparkle: "Sparkle",
-            .spectrum: "Spectrum",
-            .breathe: "Breathe",
-            .flicker: "Flicker",
-            .steady: "Steady"
+            .white: "White",
+            .pink: "Pink",
+            .teal: "Teal",
+            .cyan: "Cyan",
+            .mint: "Mint",
+            .indigo: "Indigo",
+            .brown: "Brown",
+            .gold: "Gold",
+            .silver: "Silver",
+            .christmas: "Christmas",
+            .halloween: "Halloween",
+            .valentine: "Valentine's",
+            .patriotic: "Patriotic",
+            .easter: "Easter"
         ]
     }
 }
@@ -138,11 +185,15 @@ extension NumberStyle: AppEnum {
     static var typeDisplayRepresentation: TypeDisplayRepresentation { "Numbers" }
     static var caseDisplayRepresentations: [NumberStyle: DisplayRepresentation] {
         [
+            .normal: "Normal",
             .neon: "Neon",
             .chalk: "Chalk",
-            .brokenLine: "Broken Line",
             .segments: "Segments",
-            .dotMatrix: "Dot Matrix"
+            .dotMatrix: "Dot Matrix",
+            .script: "Script",
+            .calligraphy: "Calligraphy",
+            .flip: "Flip",
+            .analog: "Analog"
         ]
     }
 }
@@ -159,14 +210,14 @@ extension NeonBloom: AppEnum {
     }
 }
 
-extension NeonSpeed: AppEnum {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Speed" }
-    static var caseDisplayRepresentations: [NeonSpeed: DisplayRepresentation] {
+extension NumberThickness: AppEnum {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Thickness" }
+    static var caseDisplayRepresentations: [NumberThickness: DisplayRepresentation] {
         [
-            .slow: "Slow",
-            .normal: "Normal",
-            .fast: "Fast",
-            .turbo: "Turbo"
+            .thin: "Thin",
+            .regular: "Regular",
+            .bold: "Bold",
+            .heavy: "Heavy"
         ]
     }
 }

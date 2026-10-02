@@ -1,1 +1,1 @@
-../../MyApp/Shared/BatteryReading.swift
+../../BigWidget/Shared/BatteryReading.swift

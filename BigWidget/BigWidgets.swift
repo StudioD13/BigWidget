@@ -49,7 +49,6 @@ struct DateWidget: View {
 struct BatteryWidget: View {
     var monitor: BatteryMonitor
 
-    @Environment(\.lightPhase) private var phase
     @Environment(\.neonStyle) private var style
 
     var body: some View {
@@ -57,12 +56,27 @@ struct BatteryWidget: View {
         let valueText = ReadoutFormat.battery(monitor.level)
 
         GlassTile(tint: tint) {
-            // The % sign and neon meter say "battery"; no caption needed.
-            BigReadout(caption: nil, value: valueText, tint: tint) {
-                DisplayMeter(level: monitor.level ?? 0, color: tint, isCharging: monitor.isCharging, style: style, phase: phase)
-                    .frame(height: 22)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 4)
+            GeometryReader { proxy in
+                // The % sign says "battery"; no caption needed. The meter is a thin accent strip,
+                // not the main event, so the number gets almost all the space.
+                BigReadout(caption: nil, value: valueText, tint: tint) {
+                    DisplayMeter(level: monitor.level ?? 0, color: tint, style: style)
+                        .frame(height: min(max(5, proxy.size.height * 0.035), 12))
+                        .padding(.horizontal, proxy.size.width * 0.14)
+                        .padding(.bottom, 4)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .overlay(alignment: .topTrailing) {
+                    // Charging needs to read at a glance, so it's a clear badge, not something
+                    // buried in the now-thin meter strip.
+                    if monitor.isCharging {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: proxy.size.height * 0.14, weight: .black))
+                            .foregroundStyle(tint)
+                            .shadow(color: tint.opacity(style.bloom.multiplier), radius: proxy.size.height * 0.02 * style.bloom.multiplier)
+                            .padding(proxy.size.height * 0.06)
+                    }
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -109,13 +123,18 @@ struct WeatherWidget: View {
     }
 
     /// Credits whichever service supplied the reading. WeatherKit requires the Apple Weather mark and a
-    /// legal link; Open-Meteo's CC BY 4.0 license requires a credit line.
+    /// legal link; National Weather Service readings name the station they were measured at.
     @ViewBuilder
     private var attributionView: some View {
-        if monitor.reading?.source == .openMeteo {
-            Link("Weather data by Open-Meteo.com", destination: OpenMeteo.attributionURL)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        if let reading = monitor.reading, reading.source == .nationalWeatherService {
+            Link(
+                reading.station.map { "National Weather Service · \($0)" } ?? "National Weather Service",
+                destination: NationalWeatherService.attributionURL
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         } else if let attribution = monitor.attribution {
             HStack(spacing: 8) {
                 AsyncImage(url: colorScheme == .dark ? attribution.combinedMarkDarkURL : attribution.combinedMarkLightURL) { image in

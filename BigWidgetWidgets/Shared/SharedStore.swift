@@ -1,1 +1,1 @@
-../../MyApp/Shared/SharedStore.swift
+../../BigWidget/Shared/SharedStore.swift

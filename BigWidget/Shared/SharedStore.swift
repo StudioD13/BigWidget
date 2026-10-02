@@ -13,15 +13,17 @@ enum SharedStore {
 
     enum Key {
         static let scheme = "neonScheme"
-        static let effect = "neonEffect"
-        static let speed = "neonSpeed"
         static let numbers = "numberStyle"
         static let bloom = "neonBloom"
+        static let thickness = "numberThickness"
+        static let isRandom = "isRandomStyle"
         static let latitude = "lastLatitude"
         static let longitude = "lastLongitude"
         static let locationDate = "lastLocationDate"
         static let weather = "lastWeather"
         static let weatherDate = "lastWeatherDate"
+        static let weatherServicePoint = "weatherServicePoint"
+        static let lastBattery = "lastBatteryReading"
     }
 
     // MARK: Style
@@ -30,11 +32,38 @@ enum SharedStore {
     static var appStyle: NeonStyle {
         NeonStyle(
             scheme: defaults.string(forKey: Key.scheme).flatMap(NeonScheme.init(rawValue:)) ?? .classic,
-            effect: defaults.string(forKey: Key.effect).flatMap(NeonEffect.init(rawValue:)) ?? .coursing,
-            speed: defaults.string(forKey: Key.speed).flatMap(NeonSpeed.init(rawValue:)) ?? .normal,
-            numbers: defaults.string(forKey: Key.numbers).flatMap(NumberStyle.init(rawValue:)) ?? .neon,
-            bloom: defaults.string(forKey: Key.bloom).flatMap(NeonBloom.init(rawValue:)) ?? .soft
+            numbers: defaults.string(forKey: Key.numbers).flatMap(NumberStyle.init(rawValue:)) ?? .normal,
+            bloom: defaults.string(forKey: Key.bloom).flatMap(NeonBloom.init(rawValue:)) ?? .soft,
+            thickness: defaults.string(forKey: Key.thickness).flatMap(NumberThickness.init(rawValue:)) ?? .regular
         )
+    }
+
+    /// Whether the app's Random option is on. A "Match App" widget checks this so it can keep
+    /// randomizing its look once a minute on its own, without needing the app to be running.
+    static var isRandom: Bool {
+        defaults.bool(forKey: Key.isRandom)
+    }
+
+    // MARK: Readouts
+
+    /// Whether the app shows a readout ("time", "date", "weather", or "battery"). Widgets set to
+    /// Match App show the same ones. Everything is shown until it's switched off.
+    static func showsInApp(_ readout: String) -> Bool {
+        defaults.object(forKey: showKey(readout)) as? Bool ?? true
+    }
+
+    static func showKey(_ readout: String) -> String { "showTile.\(readout)" }
+
+    /// The app used to keep its readout switches in its own defaults, where widgets can't see them.
+    /// Copies any saved there into the App Group, once.
+    static func moveReadoutSwitchesToAppGroup() {
+        guard defaults !== UserDefaults.standard else { return }
+        for readout in ["time", "date", "weather", "battery"] {
+            let key = showKey(readout)
+            if defaults.object(forKey: key) == nil, let value = UserDefaults.standard.object(forKey: key) as? Bool {
+                defaults.set(value, forKey: key)
+            }
+        }
     }
 
     // MARK: Location
@@ -74,5 +103,24 @@ enum SharedStore {
               let reading = try? JSONDecoder().decode(WeatherReading.self, from: data)
         else { return nil }
         return (reading, date)
+    }
+
+    // MARK: Battery
+
+    /// The most recent battery reading anything has recorded, so a background refresh can tell
+    /// whether the charge level or charging status actually changed before bothering to reload
+    /// widgets.
+    static var lastBattery: BatteryReading? {
+        get {
+            guard let data = defaults.data(forKey: Key.lastBattery) else { return nil }
+            return try? JSONDecoder().decode(BatteryReading.self, from: data)
+        }
+        set {
+            guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+                defaults.removeObject(forKey: Key.lastBattery)
+                return
+            }
+            defaults.set(data, forKey: Key.lastBattery)
+        }
     }
 }

@@ -1,1 +1,1 @@
-../../MyApp/Shared/ReadoutFormat.swift
+../../BigWidget/Shared/ReadoutFormat.swift

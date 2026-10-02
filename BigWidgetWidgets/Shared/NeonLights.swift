@@ -1,1 +1,1 @@
-../../MyApp/Shared/NeonLights.swift
+../../BigWidget/Shared/NeonLights.swift

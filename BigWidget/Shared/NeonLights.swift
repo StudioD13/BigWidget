@@ -65,7 +65,6 @@ enum NeonGlyphs {
 struct NeonLayout {
     struct Glyph {
         var path = Path()
-        /// Tube length in points, used to space the traveling light pulses.
         var length: CGFloat = 0
     }
 
@@ -88,7 +87,7 @@ struct NeonLayout {
 
     /// Digits are sized by width, then made taller (up to `maxStretch`) to use spare height.
     /// Only the path is stretched; tube thickness stays constant, so the digits get tall and thin.
-    init(text: String, in available: CGSize, maxStretch: CGFloat = 1.4) {
+    init(text: String, in available: CGSize, maxStretch: CGFloat = 2.2) {
         let characters = Array(text)
         guard !characters.isEmpty, available.width > 0, available.height > 0 else { return }
 
@@ -129,18 +128,11 @@ struct NeonLayout {
             cursor += NeonGlyphs.advance(character) + NeonGlyphs.gap
         }
     }
-
-    /// Whether a clock should stack hours over minutes: true when that makes the tubes noticeably bigger.
-    static func prefersStackedClock(in size: CGSize) -> Bool {
-        let single = NeonLayout(text: "00:00", in: size).tubeWidth
-        let stacked = NeonLayout(text: "00", in: CGSize(width: size.width, height: size.height * 0.48)).tubeWidth
-        return stacked > single * 1.15
-    }
 }
 
 // MARK: - Colors
 
-/// Solid, saturated colors for the tubes and the lights that course through them.
+/// Solid, saturated colors for the tubes.
 enum NeonColor {
     static let red = Color(red: 1.0, green: 0.08, blue: 0.1)
     static let orange = Color(red: 1.0, green: 0.45, blue: 0.0)
@@ -149,21 +141,23 @@ enum NeonColor {
     static let blue = Color(red: 0.1, green: 0.35, blue: 1.0)
     static let purple = Color(red: 0.6, green: 0.15, blue: 1.0)
     static let white = Color(red: 1.0, green: 0.97, blue: 0.92)
+    static let pink = Color(red: 1.0, green: 0.2, blue: 0.55)
+    static let teal = Color(red: 0.0, green: 0.8, blue: 0.75)
+    static let cyan = Color(red: 0.0, green: 0.85, blue: 1.0)
+    static let mint = Color(red: 0.3, green: 0.95, blue: 0.7)
+    static let indigo = Color(red: 0.4, green: 0.3, blue: 0.95)
+    static let brown = Color(red: 0.65, green: 0.4, blue: 0.2)
+    static let gold = Color(red: 0.95, green: 0.75, blue: 0.25)
+    static let silver = Color(red: 0.75, green: 0.78, blue: 0.84)
 
     static let spectrum = [red, orange, yellow, green, blue, purple]
 
-    /// Contrasting primaries to run through a tube of the given color.
-    static func contrasting(_ tube: Color) -> [Color] {
-        switch tube {
-        case red: [yellow, blue]
-        case blue: [yellow, red]
-        case yellow: [red, blue]
-        case orange: [blue, yellow]
-        case purple: [yellow, green]
-        case white: [red, blue]
-        default: [yellow, blue]
-        }
-    }
+    // Holiday palettes: cycled per character, the same way `spectrum` is for Rainbow.
+    static let christmas = [red, green, gold]
+    static let halloween = [orange, purple, green]
+    static let valentine = [pink, red]
+    static let patriotic = [red, white, blue]
+    static let easter = [pink, cyan, mint, yellow]
 }
 
 // MARK: - Style
@@ -175,6 +169,8 @@ enum NeonScheme: String, CaseIterable, Codable, Sendable {
     /// Every character a different color.
     case rainbow
     case red, orange, yellow, green, blue, purple, white
+    case pink, teal, cyan, mint, indigo, brown, gold, silver
+    case christmas, halloween, valentine, patriotic, easter
 
     var title: String {
         switch self {
@@ -187,72 +183,42 @@ enum NeonScheme: String, CaseIterable, Codable, Sendable {
         case .blue: "Blue"
         case .purple: "Purple"
         case .white: "White"
-        }
-    }
-}
-
-/// What the light inside the tubes does.
-enum NeonEffect: String, CaseIterable, Codable, Sendable {
-    /// Pulses of contrasting color travel through the tubes.
-    case coursing
-    /// White-hot sparks travel through the tubes.
-    case sparkle
-    /// Pulses cycle through every color of the rainbow.
-    case spectrum
-    /// The whole sign slowly glows brighter and dimmer.
-    case breathe
-    /// An old sign: characters now and then sputter and dim.
-    case flicker
-    /// Solid, steady light.
-    case steady
-
-    var title: String {
-        switch self {
-        case .coursing: "Coursing"
-        case .sparkle: "Sparkle"
-        case .spectrum: "Spectrum"
-        case .breathe: "Breathe"
-        case .flicker: "Flicker"
-        case .steady: "Steady"
-        }
-    }
-}
-
-/// How fast the light moves.
-enum NeonSpeed: String, CaseIterable, Codable, Sendable {
-    case slow, normal, fast, turbo
-
-    var title: String {
-        switch self {
-        case .slow: "Slow"
-        case .normal: "Normal"
-        case .fast: "Fast"
-        case .turbo: "Turbo"
+        case .pink: "Pink"
+        case .teal: "Teal"
+        case .cyan: "Cyan"
+        case .mint: "Mint"
+        case .indigo: "Indigo"
+        case .brown: "Brown"
+        case .gold: "Gold"
+        case .silver: "Silver"
+        case .christmas: "Christmas"
+        case .halloween: "Halloween"
+        case .valentine: "Valentine's"
+        case .patriotic: "Patriotic"
+        case .easter: "Easter"
         }
     }
 
-    /// Multiplier applied to how far the light travels per second (app) or per update (widgets).
-    var multiplier: Double {
+    /// Whether every character gets its own color from a cycling palette, like Rainbow — these can't
+    /// be drawn as a single combined shape the way a one-color scheme can.
+    var isMultiColor: Bool {
         switch self {
-        case .slow: 0.5
-        case .normal: 1
-        case .fast: 2
-        case .turbo: 4
+        case .rainbow, .christmas, .halloween, .valentine, .patriotic, .easter: true
+        default: false
         }
     }
 }
 
 /// Everything about how numbers look. (Named for the original neon style; it covers every number style.)
-struct NeonStyle: Equatable, Sendable {
+struct NeonStyle: Equatable, Sendable, Codable {
     var scheme: NeonScheme = .classic
-    var effect: NeonEffect = .coursing
-    var speed: NeonSpeed = .normal
-    var numbers: NumberStyle = .neon
+    var numbers: NumberStyle = .normal
     var bloom: NeonBloom = .soft
+    var thickness: NumberThickness = .regular
 
-    /// True when every character shares one color and brightness, so a whole number
-    /// can be drawn as a single tube (much cheaper, which matters in widgets).
-    var isUniform: Bool { scheme != .rainbow && effect != .flicker }
+    /// True when every character shares one color, so a whole number can be drawn as a single shape
+    /// (much cheaper, which matters in widgets).
+    var isUniform: Bool { !scheme.isMultiColor }
 
     /// The tube color for character `index`, given the readout's own color (used by `.classic`).
     func tubeColor(index: Int, readout: Color) -> Color {
@@ -266,60 +232,71 @@ struct NeonStyle: Equatable, Sendable {
         case .blue: NeonColor.blue
         case .purple: NeonColor.purple
         case .white: NeonColor.white
+        case .pink: NeonColor.pink
+        case .teal: NeonColor.teal
+        case .cyan: NeonColor.cyan
+        case .mint: NeonColor.mint
+        case .indigo: NeonColor.indigo
+        case .brown: NeonColor.brown
+        case .gold: NeonColor.gold
+        case .silver: NeonColor.silver
+        case .christmas: NeonColor.christmas[index % NeonColor.christmas.count]
+        case .halloween: NeonColor.halloween[index % NeonColor.halloween.count]
+        case .valentine: NeonColor.valentine[index % NeonColor.valentine.count]
+        case .patriotic: NeonColor.patriotic[index % NeonColor.patriotic.count]
+        case .easter: NeonColor.easter[index % NeonColor.easter.count]
         }
     }
 
-    func pulseColors(for tube: Color) -> [Color] {
-        switch effect {
-        case .coursing: NeonColor.contrasting(tube)
-        case .sparkle: [.white]
-        case .spectrum: NeonColor.spectrum
-        case .breathe, .flicker, .steady: []
-        }
+    /// A combination that's random for `date`'s minute and `element` (e.g. one readout among
+    /// several shown at once): the same for every call with that minute and element (so the app and
+    /// any matching widgets agree without talking to each other, and every precomputed entry for
+    /// that minute matches), different for the next minute, and independent of every other element
+    /// showing at the same time — so with four readouts on screen, Random gives each its own
+    /// combination instead of all four sharing one.
+    static func random(for date: Date, element: Int = 0) -> NeonStyle {
+        let minute = Int64(date.timeIntervalSinceReferenceDate / 60)
+        let seed = UInt64(bitPattern: minute) ^ (UInt64(bitPattern: Int64(element)) &* 0x9E3779B97F4A7C15)
+        var generator = SeededGenerator(seed: seed)
+        return NeonStyle(
+            scheme: NeonScheme.allCases.randomElement(using: &generator)!,
+            numbers: NumberStyle.allCases.randomElement(using: &generator)!,
+            bloom: NeonBloom.allCases.randomElement(using: &generator)!,
+            thickness: NumberThickness.allCases.randomElement(using: &generator)!
+        )
     }
+}
 
-    /// Brightness (0...1) of character `index` at `phase`.
-    func brightness(index: Int, phase: Double) -> Double {
-        switch effect {
-        case .breathe:
-            return 0.62 + 0.38 * sin(phase * 26)
-        case .flicker:
-            // Roughly one character in six sputters at any moment.
-            let step = Int((phase * 25).rounded(.down))
-            return Self.hash(index, step) % 6 == 0 ? 0.22 : 1
-        default:
-            return 1
-        }
-    }
+/// A small deterministic random source (SplitMix64), so `NeonStyle.random(for:)` gives the same
+/// answer for the same minute every time it's asked, in any process.
+private struct SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
 
-    private static func hash(_ a: Int, _ b: Int) -> Int {
-        var h = UInt64(truncatingIfNeeded: a &* 73_856_093 ^ b &* 19_349_663)
-        h ^= h >> 13
-        h = h &* 0x5bd1_e995
-        h ^= h >> 15
-        return Int(h % 1_000_003)
+    init(seed: UInt64) { state = seed }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
     }
 }
 
 // MARK: - Views
 
-/// Numbers drawn as bent glass neon tubes, with colored light coursing through them.
+/// Numbers drawn as bent glass neon tubes.
 struct NeonText: View {
     let text: String
     /// The readout's own color, used by the Classic scheme.
     var color: Color = NeonColor.blue
     var style = NeonStyle()
-    /// How far the light has traveled. The app advances this continuously;
-    /// widgets step it once per timeline entry and let it glide.
-    var phase: Double = 0
     /// Plain white tubes for tinted / clear widget styles, where the system flattens colors.
     var monochrome = false
-    /// Animate each step to the next `phase` (for widgets, which update in steps).
-    var glidesBetweenSteps = false
     /// Cheaper glow without blurs, and one tube per number when possible. Widgets use this so
     /// WidgetKit can render every timeline entry quickly and within its memory limit.
     var lightweight = false
-    var maxStretch: CGFloat = 1.4
+    var maxStretch: CGFloat = 2.2
 
     var body: some View {
         GeometryReader { proxy in
@@ -338,21 +315,14 @@ struct NeonText: View {
         .accessibilityLabel(text)
     }
 
-    /// The whole number as one tube: every character shares color and brightness.
+    /// The whole number as one tube: every character shares color.
     private func combinedTube(_ layout: NeonLayout) -> some View {
         let path = layout.glyphs.reduce(into: Path()) { $0.addPath($1.path) }
-        let length = layout.glyphs.reduce(0) { $0 + $1.length }
-        let tube = monochrome ? Color.white : style.tubeColor(index: 0, readout: color)
-        let pulses = style.pulseColors(for: tube)
+        let tube = monochrome ? .white : style.tubeColor(index: 0, readout: color)
         return NeonTube(
             path: path,
-            width: layout.tubeWidth,
+            width: layout.tubeWidth * style.thickness.multiplier,
             color: tube,
-            pulseColors: monochrome && !pulses.isEmpty ? [.white] : pulses,
-            pulseCount: max(1, Int(length / (layout.tubeWidth * 14))),
-            phase: phase,
-            brightness: style.brightness(index: 0, phase: phase),
-            glidesBetweenSteps: glidesBetweenSteps,
             lightweight: lightweight,
             bloom: style.bloom.multiplier
         )
@@ -360,40 +330,26 @@ struct NeonText: View {
 
     private func perCharacterTubes(_ layout: NeonLayout) -> some View {
         ZStack {
-                ForEach(layout.glyphs.indices, id: \.self) { index in
-                    let glyph = layout.glyphs[index]
-                    let tube = monochrome ? Color.white : style.tubeColor(index: index, readout: color)
-                    let pulses = style.pulseColors(for: tube)
-                    NeonTube(
-                        path: glyph.path,
-                        width: layout.tubeWidth,
-                        color: tube,
-                        pulseColors: monochrome && !pulses.isEmpty ? [.white] : pulses,
-                        pulseCount: max(1, Int(glyph.length / (layout.tubeWidth * 14))),
-                        // Offset each character so pulses don't march in lockstep.
-                        phase: phase + Double(index) * 0.31,
-                        brightness: style.brightness(index: index, phase: phase),
-                        glidesBetweenSteps: glidesBetweenSteps,
-                        lightweight: lightweight,
-                        bloom: style.bloom.multiplier
-                    )
-                }
+            ForEach(layout.glyphs.indices, id: \.self) { index in
+                let glyph = layout.glyphs[index]
+                let tube = monochrome ? .white : style.tubeColor(index: index, readout: color)
+                NeonTube(
+                    path: glyph.path,
+                    width: layout.tubeWidth * style.thickness.multiplier,
+                    color: tube,
+                    lightweight: lightweight,
+                    bloom: style.bloom.multiplier
+                )
+            }
         }
     }
 }
 
-/// A glass neon tube along any path: dark glass rim, saturated gas, hot core, glass highlight,
-/// soft glow, and bright pulses of other colors traveling through it.
+/// A glass neon tube along any path: dark glass rim, saturated gas, hot core, glass highlight, soft glow.
 struct NeonTube: View {
     var path: Path
     var width: CGFloat
     var color: Color
-    var pulseColors: [Color]
-    var pulseCount: Int
-    var phase: Double
-    /// 0...1; dims the gas and glow (breathe and flicker effects).
-    var brightness: Double = 1
-    var glidesBetweenSteps = false
     /// Unlit tubes (e.g. the empty part of the battery meter) show as dark glass only.
     var isLit = true
     /// Cheaper drawing for widgets.
@@ -401,33 +357,24 @@ struct NeonTube: View {
     /// Glow strength, 0 (none) to 1 (full).
     var bloom: Double = 1
 
-    private var stepAnimation: Animation? {
-        glidesBetweenSteps ? .easeInOut(duration: 1.9) : nil
-    }
-
     var body: some View {
         ZStack {
             if isLit && bloom > 0 {
                 // Glow cast onto whatever is behind the tube.
-                glow(path, color, width * (1.4 + 1.2 * bloom), opacity: 0.6 * brightness * bloom)
+                glow(path, color, width * (1.4 + 1.2 * bloom), opacity: 0.6 * bloom)
             }
 
             // Glass tube wall: a darker rim gives the tube its round, solid body.
             stroke(path, color.mix(with: .black, by: isLit ? 0.55 : 0.8), width)
             if isLit {
-                Group {
-                    stroke(path, color, width * 0.72)
-                    stroke(path, color.mix(with: .white, by: 0.4), width * 0.36)
-                }
-                .opacity(0.35 + 0.65 * brightness)
-                pulses
+                stroke(path, color, width * 0.72)
+                stroke(path, color.mix(with: .white, by: 0.4), width * 0.36)
             }
             // Specular highlight along the upper-left of the glass.
             stroke(path, .white.opacity(isLit ? 0.55 : 0.25), width * 0.12)
                 .offset(x: -width * 0.17, y: -width * 0.17)
         }
         .modifier(CompositingIfNeeded(isEnabled: !lightweight))
-        .animation(stepAnimation, value: brightness)
     }
 
     /// A soft halo behind the tube. One blur per tube; in widgets each number is a single tube
@@ -436,38 +383,6 @@ struct NeonTube: View {
         stroke(path, color, lineWidth)
             .blur(radius: lineWidth * 0.46)
             .opacity(opacity)
-    }
-
-    /// Short bright slugs of contrasting color racing along the tube.
-    private var pulses: some View {
-        ForEach(pulseColors.indices, id: \.self) { group in
-            // Each color gets its own pulses; together they alternate along the tube.
-            let shape = PulseShape(
-                path: path,
-                offset: phase,
-                count: pulseCount * pulseColors.count,
-                // Pulses cover about a fifth of the tube, so the tube's own color stays dominant.
-                length: min(0.06, 0.2 / Double(max(pulseCount * pulseColors.count, 1))),
-                groups: pulseColors.count,
-                group: group
-            )
-            let pulseColor = pulseColors[group]
-            ZStack {
-                if bloom > 0 {
-                    if lightweight {
-                        // Pulses are short, so a plain soft stroke reads as glow without another blur.
-                        shape.stroke(pulseColor.opacity(0.35 * bloom), style: Self.style(width * (1 + 0.5 * bloom)))
-                    } else {
-                        shape.stroke(pulseColor, style: Self.style(width * (1.2 + 0.8 * bloom)))
-                            .blur(radius: width * 0.9 * bloom)
-                            .opacity(0.8 * bloom)
-                    }
-                }
-                shape.stroke(pulseColor, style: Self.style(width * 0.72))
-                shape.stroke(pulseColor.mix(with: .white, by: 0.6), style: Self.style(width * 0.3))
-            }
-            .animation(stepAnimation, value: phase)
-        }
     }
 
     private func stroke(_ path: Path, _ color: Color, _ lineWidth: CGFloat) -> some View {
@@ -488,48 +403,12 @@ private struct CompositingIfNeeded: ViewModifier {
     }
 }
 
-/// Evenly spaced segments of a path, shifted by `offset` (a fraction of the path's length).
-/// Animatable, so pulses glide along the tube instead of jumping.
-private struct PulseShape: Shape {
-    var path: Path
-    var offset: Double
-    var count: Int
-    var length: Double
-    /// Pulses are split into color groups: this shape draws every `groups`-th pulse, starting at `group`.
-    var groups: Int
-    var group: Int
-
-    var animatableData: Double {
-        get { offset }
-        set { offset = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var result = Path()
-        for index in stride(from: group, to: count, by: max(groups, 1)) {
-            var start = (Double(index) / Double(count) + offset).truncatingRemainder(dividingBy: 1)
-            if start < 0 { start += 1 }
-            let end = start + length
-            if end <= 1 {
-                result.addPath(path.trimmedPath(from: start, to: end))
-            } else {
-                result.addPath(path.trimmedPath(from: start, to: 1))
-                result.addPath(path.trimmedPath(from: 0, to: end - 1))
-            }
-        }
-        return result
-    }
-}
-
 /// A battery meter as a straight neon tube: the charged part is lit, the rest is dark glass.
 struct NeonMeter: View {
     var level: Double
     var color: Color
-    var isCharging: Bool
     var style = NeonStyle()
-    var phase: Double = 0
     var monochrome = false
-    var glidesBetweenSteps = false
     var lightweight = false
 
     var body: some View {
@@ -539,34 +418,18 @@ struct NeonMeter: View {
             let start = CGPoint(x: width, y: y)
             let end = CGPoint(x: proxy.size.width - width, y: y)
             let split = CGPoint(x: start.x + (end.x - start.x) * min(max(level, 0), 1), y: y)
-            let tube = monochrome ? Color.white : style.tubeColor(index: 0, readout: color)
-            let pulses = style.pulseColors(for: tube)
+            let tube = monochrome ? .white : style.tubeColor(index: 0, readout: color)
 
             ZStack {
                 NeonTube(
                     path: Path { $0.move(to: split); $0.addLine(to: end) },
-                    width: width, color: tube, pulseColors: [], pulseCount: 0, phase: 0, isLit: false,
-                    lightweight: lightweight
+                    width: width, color: tube, isLit: false, lightweight: lightweight
                 )
                 if level > 0 {
                     NeonTube(
                         path: Path { $0.move(to: start); $0.addLine(to: split) },
-                        width: width,
-                        color: tube,
-                        pulseColors: monochrome && !pulses.isEmpty ? [.white] : pulses,
-                        pulseCount: isCharging ? 3 : 1,
-                        phase: phase,
-                        brightness: style.brightness(index: 0, phase: phase),
-                        glidesBetweenSteps: glidesBetweenSteps,
-                        lightweight: lightweight,
-                        bloom: style.bloom.multiplier
+                        width: width, color: tube, lightweight: lightweight, bloom: style.bloom.multiplier
                     )
-                }
-                if isCharging {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: width * 2.2, weight: .black))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.6), radius: 2)
                 }
             }
         }
@@ -576,12 +439,12 @@ struct NeonMeter: View {
 
 #Preview {
     VStack(spacing: 12) {
-        NeonText(text: "12:34", color: NeonColor.blue, style: .init(scheme: .classic, effect: .coursing), phase: 0.1)
-        NeonText(text: "56789", style: .init(scheme: .rainbow, effect: .sparkle), phase: 0.3)
-        NeonText(text: "72°", style: .init(scheme: .purple, effect: .spectrum), phase: 0.2)
-        NeonText(text: "27", style: .init(scheme: .white, effect: .flicker), phase: 0.44)
-        NeonText(text: "82%", color: NeonColor.green, style: .init(scheme: .orange, effect: .breathe), phase: 0.4)
-        NeonMeter(level: 0.82, color: NeonColor.green, isCharging: true, phase: 0.2)
+        NeonText(text: "12:34", color: NeonColor.blue, style: .init(scheme: .classic))
+        NeonText(text: "56789", style: .init(scheme: .rainbow))
+        NeonText(text: "72°", style: .init(scheme: .purple))
+        NeonText(text: "27", style: .init(scheme: .white))
+        NeonText(text: "82%", color: NeonColor.green, style: .init(scheme: .orange))
+        NeonMeter(level: 0.82, color: NeonColor.green)
             .frame(height: 24)
     }
     .padding()
