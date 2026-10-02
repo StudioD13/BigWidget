@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Settings
 
@@ -266,14 +271,13 @@ struct ScriptText: View {
     var monochrome: Bool
 
     var body: some View {
-        FontDrawnText(text: text, color: color, style: style, monochrome: monochrome) { size in
-            .custom("SnellRoundhand-Black", size: size)
-        }
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "SnellRoundhand-Black")
     }
 }
 
-/// Ornate, flourished calligraphy (Zapfino, bundled with the system). One weight, so Thickness has
-/// no effect here either.
+/// Bold, hand-lettered calligraphy (Bradley Hand, bundled with the system) — thick, confident
+/// strokes, deliberately a different weight and letterform from Script's thin elegant loops rather
+/// than another flavor of the same cursive. One weight, so Thickness has no effect here either.
 struct CalligraphyText: View {
     let text: String
     var color: Color
@@ -281,9 +285,72 @@ struct CalligraphyText: View {
     var monochrome: Bool
 
     var body: some View {
-        FontDrawnText(text: text, color: color, style: style, monochrome: monochrome) { size in
-            .custom("Zapfino", size: size)
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "BradleyHandITCTT-Bold")
+    }
+}
+
+/// Shared engine for a number style drawn with a specific NAMED font (Script, Calligraphy): measures
+/// the text's own real rendered size in that exact font, then scales up to fill whichever dimension —
+/// width or height — is the tighter fit, stretching vertically into any dimension left over (the same
+/// width-then-height approach every custom-drawn style uses). `NeonLayout`'s generic per-character box
+/// is calibrated for the hand-drawn tube digits; an ornate script face's swashes and connecting
+/// strokes are nothing like a plain digit's proportions, so sizing into that generic box — or relying
+/// on `minimumScaleFactor` to shrink-to-fit — left a lot of the available space empty. Measuring the
+/// font's own metrics directly fixes that.
+private struct NamedFontText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+    var fontName: String
+    /// How far past the tight fit a style may stretch vertically to use spare height.
+    var maxStretch: CGFloat = 2.2
+
+    var body: some View {
+        GeometryReader { proxy in
+            let natural = Self.measure(text, fontName: fontName, size: Self.reference)
+            let widthScale = natural.width > 0 ? proxy.size.width / natural.width : 1
+            let heightScale = natural.height > 0 ? proxy.size.height / natural.height : 1
+            let scale = min(widthScale, heightScale)
+            let stretch = scale > 0 ? min(max(heightScale / scale, 1), maxStretch) : 1
+
+            Text(attributedText)
+                .font(.custom(fontName, fixedSize: Self.reference * scale))
+                .lineLimit(1)
+                .frame(width: natural.width * scale, height: natural.height * scale)
+                .scaleEffect(x: 1, y: stretch)
+                .frame(width: proxy.size.width, height: proxy.size.height)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+    }
+
+    private var attributedText: AttributedString {
+        var result = AttributedString()
+        for (index, character) in text.enumerated() {
+            var run = AttributedString(String(character))
+            run.foregroundColor = monochrome ? .white : style.tubeColor(index: index, readout: color)
+            result += run
+        }
+        return result
+    }
+
+    private static let reference: CGFloat = 200
+
+    /// The text's actual rendered width and height in this exact named font, at `size` — a decorative
+    /// font's em-square bears little relation to its visible glyph size (Zapfino, for example, draws
+    /// glyphs at a small fraction of its nominal point size), so this measures the real thing instead
+    /// of assuming a standard font's proportions.
+    private static func measure(_ text: String, fontName: String, size: CGFloat) -> CGSize {
+        #if canImport(UIKit)
+        let font = UIFont(name: fontName, size: size) ?? UIFont.systemFont(ofSize: size)
+        return (text as NSString).size(withAttributes: [.font: font])
+        #elseif canImport(AppKit)
+        let font = NSFont(name: fontName, size: size) ?? NSFont.systemFont(ofSize: size)
+        return (text as NSString).size(withAttributes: [.font: font])
+        #else
+        return CGSize(width: size * CGFloat(text.count) * 0.6, height: size * 1.2)
+        #endif
     }
 }
 
