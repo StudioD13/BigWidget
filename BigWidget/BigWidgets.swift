@@ -123,10 +123,17 @@ struct WeatherWidget: View {
     }
 
     /// Credits whichever service supplied the reading. WeatherKit requires the Apple Weather mark and a
-    /// legal link; National Weather Service readings name the station they were measured at.
+    /// legal link; National Weather Service readings name the station they were measured at; MET
+    /// Norway's CC BY 4.0 license just needs a name and a link.
     @ViewBuilder
     private var attributionView: some View {
-        if let reading = monitor.reading, reading.source == .nationalWeatherService {
+        if let reading = monitor.reading, reading.source == .metNorway {
+            Link("MET Norway", destination: MetNorwayWeatherService.attributionURL)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        } else if let reading = monitor.reading, reading.source == .nationalWeatherService {
             Link(
                 reading.station.map { "National Weather Service · \($0)" } ?? "National Weather Service",
                 destination: NationalWeatherService.attributionURL

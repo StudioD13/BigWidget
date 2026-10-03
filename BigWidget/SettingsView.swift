@@ -4,7 +4,7 @@ import WidgetKit
 /// App preferences. The neon style is stored in the shared App Group, so widgets set to
 /// "Match App Style" pick up changes immediately.
 struct SettingsView: View {
-    @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .classic
+    @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .white
     @AppStorage(SharedStore.Key.numbers, store: SharedStore.defaults) private var numbers: NumberStyle = .normal
     @AppStorage(SharedStore.Key.bloom, store: SharedStore.defaults) private var bloom: NeonBloom = .soft
     @AppStorage(SharedStore.Key.thickness, store: SharedStore.defaults) private var thickness: NumberThickness = .regular

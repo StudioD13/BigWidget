@@ -20,7 +20,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
 
     /// On: show the readouts and look chosen in the BigWidget app (changes apply instantly).
     /// (Named for when it covered only the look; the name is saved in people's widgets.)
-    @Parameter(title: "Match App", default: true)
+    @Parameter(title: "Match App", default: false)
     var matchAppStyle: Bool
 
     /// On: a new random combination of Numbers, Colors, Bloom, and Thickness every minute,
@@ -31,7 +31,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
     @Parameter(title: "Numbers", default: .normal)
     var numbers: NumberStyle
 
-    @Parameter(title: "Colors", default: .classic)
+    @Parameter(title: "Colors", default: .white)
     var scheme: NeonScheme
 
     @Parameter(title: "Bloom", default: .soft)
@@ -101,7 +101,7 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
         showWeather = weather
         matchAppStyle = style == nil
         isRandom = false
-        scheme = style?.scheme ?? .classic
+        scheme = style?.scheme ?? .white
         numbers = style?.numbers ?? .normal
         bloom = style?.bloom ?? .soft
         thickness = style?.thickness ?? .regular
@@ -172,6 +172,16 @@ extension NeonScheme: AppEnum {
             .brown: "Brown",
             .gold: "Gold",
             .silver: "Silver",
+            .magenta: "Magenta",
+            .lime: "Lime",
+            .coral: "Coral",
+            .crimson: "Crimson",
+            .navy: "Navy",
+            .lavender: "Lavender",
+            .emerald: "Emerald",
+            .amber: "Amber",
+            .rose: "Rose",
+            .rust: "Rust",
             .christmas: "Christmas",
             .halloween: "Halloween",
             .valentine: "Valentine's",
@@ -192,7 +202,16 @@ extension NumberStyle: AppEnum {
             .dotMatrix: "Dot Matrix",
             .script: "Script",
             .calligraphy: "Calligraphy",
-            .flip: "Flip",
+            .mono: "Mono",
+            .rounded: "Rounded",
+            .typewriter: "Typewriter",
+            .slab: "Slab",
+            .varsity: "Varsity",
+            .serif: "Serif",
+            .comic: "Comic",
+            .engraved: "Engraved",
+            .editorial: "Editorial",
+            .royal: "Royal",
             .analog: "Analog"
         ]
     }

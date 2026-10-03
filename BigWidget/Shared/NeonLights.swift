@@ -149,6 +149,16 @@ enum NeonColor {
     static let brown = Color(red: 0.65, green: 0.4, blue: 0.2)
     static let gold = Color(red: 0.95, green: 0.75, blue: 0.25)
     static let silver = Color(red: 0.75, green: 0.78, blue: 0.84)
+    static let magenta = Color(red: 1.0, green: 0.0, blue: 0.85)
+    static let lime = Color(red: 0.6, green: 1.0, blue: 0.0)
+    static let coral = Color(red: 1.0, green: 0.4, blue: 0.35)
+    static let crimson = Color(red: 0.85, green: 0.0, blue: 0.15)
+    static let navy = Color(red: 0.1, green: 0.2, blue: 0.65)
+    static let lavender = Color(red: 0.75, green: 0.6, blue: 1.0)
+    static let emerald = Color(red: 0.0, green: 0.75, blue: 0.45)
+    static let amber = Color(red: 1.0, green: 0.65, blue: 0.0)
+    static let rose = Color(red: 0.95, green: 0.45, blue: 0.55)
+    static let rust = Color(red: 0.75, green: 0.25, blue: 0.1)
 
     static let spectrum = [red, orange, yellow, green, blue, purple]
 
@@ -170,6 +180,7 @@ enum NeonScheme: String, CaseIterable, Codable, Sendable {
     case rainbow
     case red, orange, yellow, green, blue, purple, white
     case pink, teal, cyan, mint, indigo, brown, gold, silver
+    case magenta, lime, coral, crimson, navy, lavender, emerald, amber, rose, rust
     case christmas, halloween, valentine, patriotic, easter
 
     var title: String {
@@ -191,6 +202,16 @@ enum NeonScheme: String, CaseIterable, Codable, Sendable {
         case .brown: "Brown"
         case .gold: "Gold"
         case .silver: "Silver"
+        case .magenta: "Magenta"
+        case .lime: "Lime"
+        case .coral: "Coral"
+        case .crimson: "Crimson"
+        case .navy: "Navy"
+        case .lavender: "Lavender"
+        case .emerald: "Emerald"
+        case .amber: "Amber"
+        case .rose: "Rose"
+        case .rust: "Rust"
         case .christmas: "Christmas"
         case .halloween: "Halloween"
         case .valentine: "Valentine's"
@@ -211,7 +232,7 @@ enum NeonScheme: String, CaseIterable, Codable, Sendable {
 
 /// Everything about how numbers look. (Named for the original neon style; it covers every number style.)
 struct NeonStyle: Equatable, Sendable, Codable {
-    var scheme: NeonScheme = .classic
+    var scheme: NeonScheme = .white
     var numbers: NumberStyle = .normal
     var bloom: NeonBloom = .soft
     var thickness: NumberThickness = .regular
@@ -240,6 +261,16 @@ struct NeonStyle: Equatable, Sendable, Codable {
         case .brown: NeonColor.brown
         case .gold: NeonColor.gold
         case .silver: NeonColor.silver
+        case .magenta: NeonColor.magenta
+        case .lime: NeonColor.lime
+        case .coral: NeonColor.coral
+        case .crimson: NeonColor.crimson
+        case .navy: NeonColor.navy
+        case .lavender: NeonColor.lavender
+        case .emerald: NeonColor.emerald
+        case .amber: NeonColor.amber
+        case .rose: NeonColor.rose
+        case .rust: NeonColor.rust
         case .christmas: NeonColor.christmas[index % NeonColor.christmas.count]
         case .halloween: NeonColor.halloween[index % NeonColor.halloween.count]
         case .valentine: NeonColor.valentine[index % NeonColor.valentine.count]

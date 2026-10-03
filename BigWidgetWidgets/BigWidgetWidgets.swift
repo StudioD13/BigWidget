@@ -54,15 +54,16 @@ struct BigWidgetEntry: TimelineEntry {
 /// background instead and reloads the widgets when a new reading lands.
 struct Provider: AppIntentTimelineProvider {
     /// A saved reading younger than this is current; an older one triggers a background refresh.
-    /// (Was 15 minutes; shortened for now because readings were drifting several degrees stale.
-    /// WidgetKit's daily refresh budget means this won't always be honored exactly.)
     private static let weatherFreshness: TimeInterval = 60
     /// A saved reading older than this is too stale to show.
     private static let weatherMaxAge: TimeInterval = 3 * 60 * 60
-    /// The longest a timeline runs before asking to be rebuilt, so the battery reading (fetched once
-    /// per build and reused for the whole hour of entries) can't go stale for longer than this —
-    /// otherwise unplugging the charger wouldn't show up in the widget for up to an hour.
-    private static let batteryFreshness: TimeInterval = 15 * 60
+    /// How soon to ask WidgetKit to rebuild the timeline again — every time, not just while weather
+    /// is stale — so a widget that's actually being looked at keeps both battery and weather close
+    /// to live. This is a request, not a guarantee: WidgetKit's daily refresh budget decides how
+    /// often it's actually honored, and it leans toward granting more of that budget to widgets
+    /// people are actually viewing. Asking this often for a widget nobody's looking at just means
+    /// the budget quietly throttles it back down — which is the right outcome, not a bug.
+    private static let refreshInterval: TimeInterval = 60
 
     /// What each timeline was built from, so a widget that looks wrong can be traced to its inputs.
     private static let logger = Logger(subsystem: "Studio-D.BigWidget", category: "Widget")
@@ -123,12 +124,10 @@ struct Provider: AppIntentTimelineProvider {
                 date: date, readouts: readouts, styles: Self.styles(for: configuration, at: date), battery: battery, weather: weather
             )
         }
-        // While weather is missing or stale, check back sooner, in case the background refresh
-        // couldn't finish before the system suspended the extension. Otherwise, still check back
-        // well before the hour's up, so a battery change (e.g. unplugging) doesn't sit stale.
-        let policy: TimelineReloadPolicy = .after(
-            .now.addingTimeInterval(needsWeather ? Self.weatherFreshness : Self.batteryFreshness)
-        )
+        // Always ask back soon, whether or not weather happens to be fresh right now — someone
+        // looking at the widget for the next five minutes wants the battery and weather it shows to
+        // keep tracking reality for that whole five minutes, not just until the first reading lands.
+        let policy: TimelineReloadPolicy = .after(.now.addingTimeInterval(Self.refreshInterval))
         return Timeline(entries: entries, policy: policy)
     }
 
@@ -200,9 +199,16 @@ struct BigWidgetWidgets: Widget {
 
     private static var families: [WidgetFamily] {
         #if os(visionOS)
-        [.systemSmall, .systemMedium, .systemLarge]
+        // visionOS's own extra-large widget is the portrait variant (`.systemExtraLarge` without
+        // "Portrait" is for an iOS/iPadOS app running in visionOS compatibility mode, not a native
+        // visionOS app like this one).
+        [.systemSmall, .systemMedium, .systemLarge, .systemExtraLargePortrait]
         #else
-        [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge]
+        // `.systemExtraLarge` (landscape) is iPad- and Mac-only. `.systemExtraLargePortrait` is the
+        // one that actually reaches the iPhone Home Screen — on large-screened and foldable iPhones
+        // (confirmed on iPhone Duo unfolded) — as well as iPad's Today View and the Mac desktop.
+        // Declaring both costs nothing on a device that only has one or neither.
+        [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge, .systemExtraLargePortrait]
         #endif
     }
 }
@@ -288,7 +294,7 @@ struct BigWidgetEntryView: View {
                     .frame(height: rowHeight * share(rows[1], in: rows))
                 }
 
-            case (_, .systemSmall), (2, .systemLarge):
+            case (_, .systemSmall), (2, .systemLarge), (2, .systemExtraLargePortrait):
                 // Stack vertically when the widget is squarish or tall. Time gets extra height.
                 let usableHeight = usable(proxy.size.height, gaps: readouts.count - 1, spacing: spacing)
                 VStack(spacing: spacing) {
@@ -297,7 +303,7 @@ struct BigWidgetEntryView: View {
                     }
                 }
 
-            case (3, .systemLarge):
+            case (3, .systemLarge), (3, .systemExtraLargePortrait):
                 // Time across the top (with extra height), the other two side by side below.
                 let rows = [[readouts[0]], [readouts[1], readouts[2]]]
                 let rowHeight = usable(proxy.size.height, gaps: 1, spacing: spacing)
@@ -592,6 +598,12 @@ private let previewStyles: [String: NeonStyle] = [
     BigWidgetWidgets()
 } timeline: {
     BigWidgetEntry(date: .now, readouts: ConfigurationAppIntent.timeAndDate.readouts, style: previewStyles["timeAndDate"]!, battery: sampleBattery)
+    BigWidgetEntry(date: .now, readouts: ConfigurationAppIntent.all.readouts, style: previewStyles["all"]!, battery: sampleBattery, weather: .sample)
+}
+
+#Preview("Extra Large Portrait", as: .systemExtraLargePortrait) {
+    BigWidgetWidgets()
+} timeline: {
     BigWidgetEntry(date: .now, readouts: ConfigurationAppIntent.all.readouts, style: previewStyles["all"]!, battery: sampleBattery, weather: .sample)
 }
 

@@ -7,7 +7,7 @@ struct ContentView: View {
     @State private var weather = WeatherMonitor()
     @State private var showsSettings = false
 
-    @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .classic
+    @AppStorage(SharedStore.Key.scheme, store: SharedStore.defaults) private var scheme: NeonScheme = .white
     @AppStorage(SharedStore.Key.numbers, store: SharedStore.defaults) private var numbers: NumberStyle = .normal
     @AppStorage(SharedStore.Key.bloom, store: SharedStore.defaults) private var bloom: NeonBloom = .soft
     @AppStorage(SharedStore.Key.thickness, store: SharedStore.defaults) private var thickness: NumberThickness = .regular

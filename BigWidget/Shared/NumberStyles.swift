@@ -24,8 +24,26 @@ enum NumberStyle: String, CaseIterable, Codable, Sendable {
     case script
     /// Ornate, flourished calligraphy.
     case calligraphy
-    /// A mechanical split-flap display, like an old alarm clock or departure board.
-    case flip
+    /// Bold monospaced digits, every character the same width.
+    case mono
+    /// Big, friendly, fully-rounded digits.
+    case rounded
+    /// An old mechanical typewriter's digits.
+    case typewriter
+    /// A bold slab serif, like a vintage scoreboard or sign.
+    case slab
+    /// A bold, condensed athletic-jersey numeral.
+    case varsity
+    /// A classic serif, like a page of a book.
+    case serif
+    /// Playful, chunky comic lettering.
+    case comic
+    /// A clean, engraved look, like lettering cut into stone.
+    case engraved
+    /// An elegant, high-contrast fashion-magazine serif.
+    case editorial
+    /// A stately, engraved-stamp numeral.
+    case royal
     /// A clock face for Time; radial gauges for Battery and Weather; plain digits for Date, which
     /// has no natural analog form.
     case analog
@@ -39,14 +57,28 @@ enum NumberStyle: String, CaseIterable, Codable, Sendable {
         case .dotMatrix: "Dot Matrix"
         case .script: "Script"
         case .calligraphy: "Calligraphy"
-        case .flip: "Flip"
+        case .mono: "Mono"
+        case .rounded: "Rounded"
+        case .typewriter: "Typewriter"
+        case .slab: "Slab"
+        case .varsity: "Varsity"
+        case .serif: "Serif"
+        case .comic: "Comic"
+        case .engraved: "Engraved"
+        case .editorial: "Editorial"
+        case .royal: "Royal"
         case .analog: "Analog"
         }
     }
 
-    /// Chalk, Normal, Script, Calligraphy, and Flip are all meant to look plain or realistic, not
-    /// glowing, so Bloom doesn't apply to them.
-    var usesBloom: Bool { ![.chalk, .normal, .script, .calligraphy, .flip].contains(self) }
+    /// Every plain, font-drawn style — realistic lettering rather than a glowing or lit-up look — so
+    /// Bloom doesn't apply to them.
+    var usesBloom: Bool {
+        ![
+            .chalk, .normal, .script, .calligraphy, .mono, .rounded, .typewriter, .slab, .varsity,
+            .serif, .comic, .engraved, .editorial, .royal
+        ].contains(self)
+    }
 }
 
 /// How thick the strokes of the numbers are, in every number style.
@@ -152,8 +184,26 @@ struct DisplayText: View {
             ScriptText(text: text, color: color, style: style, monochrome: monochrome)
         case .calligraphy:
             CalligraphyText(text: text, color: color, style: style, monochrome: monochrome)
-        case .flip:
-            FlipText(text: text, color: color, style: style, monochrome: monochrome)
+        case .mono:
+            MonoText(text: text, color: color, style: style, monochrome: monochrome)
+        case .rounded:
+            RoundedText(text: text, color: color, style: style, monochrome: monochrome)
+        case .typewriter:
+            TypewriterText(text: text, color: color, style: style, monochrome: monochrome)
+        case .slab:
+            SlabText(text: text, color: color, style: style, monochrome: monochrome)
+        case .varsity:
+            VarsityText(text: text, color: color, style: style, monochrome: monochrome)
+        case .serif:
+            SerifText(text: text, color: color, style: style, monochrome: monochrome)
+        case .comic:
+            ComicText(text: text, color: color, style: style, monochrome: monochrome)
+        case .engraved:
+            EngravedText(text: text, color: color, style: style, monochrome: monochrome)
+        case .editorial:
+            EditorialText(text: text, color: color, style: style, monochrome: monochrome)
+        case .royal:
+            RoyalText(text: text, color: color, style: style, monochrome: monochrome)
         case .analog:
             AnalogDisplay(text: text, color: color, style: style, monochrome: monochrome)
         }
@@ -195,7 +245,8 @@ struct DisplayMeter: View {
             // The Analog battery gauge already shows the charge level itself; a bar underneath
             // would be redundant.
             EmptyView()
-        case .normal, .script, .calligraphy, .flip:
+        case .normal, .script, .calligraphy, .mono, .rounded, .typewriter, .slab, .varsity,
+             .serif, .comic, .engraved, .editorial, .royal:
             PlainMeter(level: level, color: monochrome ? .white : color)
         default:
             NeonMeter(level: level, color: color, style: style, monochrome: monochrome, lightweight: lightweight)
@@ -744,66 +795,137 @@ private enum MatrixFont {
     }
 }
 
-// MARK: - Flip
+// MARK: - Mono, Rounded, Typewriter, Slab, Varsity
 
-/// A mechanical split-flap display, like an old alarm clock or an airport departure board: each
-/// character sits on its own dark card with a center crease and a soft embossed sheen.
-struct FlipText: View {
+/// Bold monospaced digits, every character the same width, like a terminal or ticker. Unlike the
+/// decorative named fonts below, the system's monospaced design has real weights, so Thickness still
+/// does something here.
+struct MonoText: View {
     let text: String
     var color: Color
     var style: NeonStyle
     var monochrome: Bool
 
     var body: some View {
-        GlyphCanvas(text: text) { layout in
-            ZStack {
-                ForEach(layout.placements.indices, id: \.self) { index in
-                    let placement = layout.placements[index]
-                    let width = NeonGlyphs.advance(placement.character) * layout.unit
-                    FlipCard(
-                        character: placement.character,
-                        tint: monochrome ? .white : style.tubeColor(index: index, readout: color)
-                    )
-                    .frame(width: width * 0.88, height: layout.size.height)
-                    .position(x: (placement.x + NeonGlyphs.advance(placement.character) / 2) * layout.unit, y: layout.size.height / 2)
-                }
-            }
+        FontDrawnText(text: text, color: color, style: style, monochrome: monochrome) { size in
+            .system(size: size, weight: style.thickness.fontWeight, design: .monospaced)
         }
     }
 }
 
-/// One split-flap card: a dark rounded tile, an embossed gradient, a center crease, and a bold
-/// character.
-private struct FlipCard: View {
-    var character: Character
-    var tint: Color
+/// Big, friendly, fully-rounded digits — the system's rounded design, which also has real weights.
+struct RoundedText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
 
     var body: some View {
-        GeometryReader { proxy in
-            let w = proxy.size.width
-            let h = proxy.size.height
-            let corner = min(w, h) * 0.12
-            ZStack {
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(Color(white: 0.09))
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [.white.opacity(0.1), .clear, .black.opacity(0.35)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-                Text(String(character))
-                    .font(.system(size: h * 0.74, weight: .bold, design: .default))
-                    .monospacedDigit()
-                    .foregroundStyle(tint)
-                    .shadow(color: .black.opacity(0.6), radius: 1, y: 1)
-                // The flap crease, dead center.
-                Rectangle().fill(Color.black.opacity(0.7)).frame(height: max(1, h * 0.012))
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.7), lineWidth: 1)
-            )
+        FontDrawnText(text: text, color: color, style: style, monochrome: monochrome) { size in
+            .system(size: size, weight: style.thickness.fontWeight, design: .rounded)
         }
+    }
+}
+
+/// An old mechanical typewriter's digits (American Typewriter, bundled with the system). One weight,
+/// so Thickness has no effect here, the same as Script and Calligraphy.
+struct TypewriterText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "AmericanTypewriter-Bold")
+    }
+}
+
+/// A bold slab serif, like a vintage scoreboard or sign (Superclarendon, bundled with the system).
+struct SlabText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "Superclarendon-Black")
+    }
+}
+
+/// A bold, condensed athletic-jersey numeral (Avenir Next Condensed, bundled with the system).
+struct VarsityText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "AvenirNextCondensed-Heavy")
+    }
+}
+
+// MARK: - Serif, Comic, Engraved, Editorial, Royal
+
+/// A classic serif, like a page of a book — the system's serif design, which has real weights.
+struct SerifText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        FontDrawnText(text: text, color: color, style: style, monochrome: monochrome) { size in
+            .system(size: size, weight: style.thickness.fontWeight, design: .serif)
+        }
+    }
+}
+
+/// Playful, chunky comic lettering (Noteworthy, bundled with the system). One weight, so Thickness
+/// has no effect here, the same as Script and Calligraphy.
+struct ComicText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "Noteworthy-Bold")
+    }
+}
+
+/// A clean, engraved look, like lettering cut into stone (Optima, bundled with the system).
+struct EngravedText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "Optima-ExtraBlack")
+    }
+}
+
+/// An elegant, high-contrast fashion-magazine serif (Didot, bundled with the system).
+struct EditorialText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "Didot-Bold")
+    }
+}
+
+/// A stately, engraved-stamp numeral (Copperplate, bundled with the system).
+struct RoyalText: View {
+    let text: String
+    var color: Color
+    var style: NeonStyle
+    var monochrome: Bool
+
+    var body: some View {
+        NamedFontText(text: text, color: color, style: style, monochrome: monochrome, fontName: "Copperplate-Bold")
     }
 }
 
@@ -845,12 +967,16 @@ private struct AnalogClockFace: View {
             let (hour, minute) = Self.parse(text)
             ZStack {
                 Circle().strokeBorder(tint.opacity(0.5), lineWidth: size * 0.025)
-                ForEach(0..<12, id: \.self) { tick in
-                    Capsule()
-                        .fill(tint.opacity(tick % 3 == 0 ? 0.9 : 0.4))
-                        .frame(width: tick % 3 == 0 ? size * 0.025 : size * 0.014, height: tick % 3 == 0 ? size * 0.09 : size * 0.05)
-                        .offset(y: -size * 0.42)
-                        .rotationEffect(.degrees(Double(tick) * 30))
+                // All 12 hours, in their usual places — each number stays upright regardless of
+                // where it sits on the dial, the way a normal clock face is printed, rather than
+                // rotating to follow the circle.
+                ForEach(1...12, id: \.self) { hourLabel in
+                    let angle = Double(hourLabel % 12) * 30 * .pi / 180
+                    Text("\(hourLabel)")
+                        .font(.system(size: size * 0.11, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(tint)
+                        .offset(x: sin(angle) * size * 0.37, y: -cos(angle) * size * 0.37)
                 }
                 Capsule().fill(tint) // Hour hand.
                     .frame(width: size * 0.035, height: size * 0.26)
@@ -964,7 +1090,11 @@ private struct GaugeArc: Shape {
     VStack(spacing: 10) {
         DisplayText(text: "12:34", style: NeonStyle(scheme: .gold, numbers: .script))
         DisplayText(text: "82%", style: NeonStyle(scheme: .christmas, numbers: .calligraphy))
-        DisplayText(text: "4:42", style: NeonStyle(scheme: .patriotic, numbers: .flip))
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .patriotic, numbers: .mono))
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .blue, numbers: .rounded))
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .red, numbers: .typewriter))
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .teal, numbers: .slab))
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .purple, numbers: .varsity))
         HStack(spacing: 10) {
             DisplayText(text: "4:42", style: NeonStyle(scheme: .halloween, numbers: .analog))
             DisplayText(text: "82%", style: NeonStyle(scheme: .teal, numbers: .analog))
@@ -972,6 +1102,30 @@ private struct GaugeArc: Shape {
         }
     }
     .padding()
-    .frame(height: 650)
+    .frame(height: 1350)
+    .background(.black)
+}
+
+#Preview("Newest styles") {
+    VStack(spacing: 10) {
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .lime, numbers: .comic)).frame(height: 140)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .magenta, numbers: .serif)).frame(height: 140)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .navy, numbers: .engraved)).frame(height: 140)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .rose, numbers: .editorial)).frame(height: 140)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .emerald, numbers: .royal)).frame(height: 140)
+    }
+    .padding()
+    .background(.black)
+}
+
+#Preview("Newest colors") {
+    VStack(spacing: 10) {
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .crimson, numbers: .normal)).frame(height: 100)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .coral, numbers: .normal)).frame(height: 100)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .amber, numbers: .normal)).frame(height: 100)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .lavender, numbers: .normal)).frame(height: 100)
+        DisplayText(text: "4:42", style: NeonStyle(scheme: .rust, numbers: .normal)).frame(height: 100)
+    }
+    .padding()
     .background(.black)
 }

@@ -31,7 +31,7 @@ enum SharedStore {
     /// The neon style chosen in the app. Widgets set to "Match App" use this.
     static var appStyle: NeonStyle {
         NeonStyle(
-            scheme: defaults.string(forKey: Key.scheme).flatMap(NeonScheme.init(rawValue:)) ?? .classic,
+            scheme: defaults.string(forKey: Key.scheme).flatMap(NeonScheme.init(rawValue:)) ?? .white,
             numbers: defaults.string(forKey: Key.numbers).flatMap(NumberStyle.init(rawValue:)) ?? .normal,
             bloom: defaults.string(forKey: Key.bloom).flatMap(NeonBloom.init(rawValue:)) ?? .soft,
             thickness: defaults.string(forKey: Key.thickness).flatMap(NumberThickness.init(rawValue:)) ?? .regular

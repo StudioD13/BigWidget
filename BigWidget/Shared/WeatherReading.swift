@@ -6,13 +6,13 @@ import Synchronization
 
 /// Current conditions, shared by the app and the widget.
 ///
-/// Apple Weather (WeatherKit) is tried first. If it refuses — most often because Apple hasn't finished
-/// activating WeatherKit for a new app ID — the reading comes from the U.S. National Weather Service:
-/// free, no key, and highly local (the nearest official station's latest measurement). Apple Weather
-/// takes over automatically as soon as it starts answering.
+/// MET Norway is tried first — global, free, no key — while its readings get evaluated against the
+/// others (see `lookUp`). The National Weather Service comes next, in the U.S.: a real station's
+/// measured reading, not a model's estimate. Apple Weather (WeatherKit), a modeled nowcast, is the
+/// last resort, used only when neither free service has an answer.
 struct WeatherReading: Sendable, Equatable, Codable {
     enum Source: String, Sendable, Equatable, Codable {
-        case appleWeather, nationalWeatherService
+        case appleWeather, nationalWeatherService, metNorway
     }
 
     /// Rounded, in the person's preferred unit, e.g. "72°".
@@ -63,6 +63,22 @@ struct WeatherReading: Sendable, Equatable, Codable {
     }
 
     private static func lookUp(at location: CLLocation) async -> Result<WeatherReading, Failure> {
+        // MET Norway first, for now — evaluating it as a possible global replacement for the
+        // WeatherKit fallback. Still falls back the same way if it has nothing.
+        do {
+            let reading = try await MetNorwayWeatherService.current(at: location.coordinate)
+            logger.notice("MET Norway loaded: \(reading.temperature, privacy: .public) \(reading.condition, privacy: .public)")
+            return .success(reading)
+        } catch {
+            logger.notice("MET Norway unavailable, trying National Weather Service: \(String(describing: error), privacy: .public)")
+        }
+        do {
+            let reading = try await NationalWeatherService.current(at: location.coordinate)
+            logger.notice("National Weather Service loaded: \(reading.temperature, privacy: .public) \(reading.condition, privacy: .public) at \(reading.station ?? "forecast grid", privacy: .public)")
+            return .success(reading)
+        } catch {
+            logger.notice("National Weather Service unavailable, trying Apple Weather: \(String(describing: error), privacy: .public)")
+        }
         do {
             let current = try await WeatherService.shared.weather(for: location, including: .current)
             logger.notice("Apple Weather loaded: \(current.temperature.formatted(), privacy: .public)")
@@ -74,14 +90,7 @@ struct WeatherReading: Sendable, Equatable, Codable {
                 source: .appleWeather
             ))
         } catch {
-            logger.error("Apple Weather failed, trying National Weather Service: \(error.localizedDescription, privacy: .public)")
-        }
-        do {
-            let reading = try await NationalWeatherService.current(at: location.coordinate)
-            logger.notice("National Weather Service loaded: \(reading.temperature, privacy: .public) \(reading.condition, privacy: .public) at \(reading.station ?? "forecast grid", privacy: .public)")
-            return .success(reading)
-        } catch {
-            logger.error("National Weather Service failed: \(String(describing: error), privacy: .public)")
+            logger.error("Apple Weather failed too: \(error.localizedDescription, privacy: .public)")
             return .failure(.serviceUnavailable)
         }
     }
@@ -102,6 +111,133 @@ struct WeatherReading: Sendable, Equatable, Codable {
             .replacingOccurrences(of: "\u{2212}", with: "-")
             .filter { $0.isASCII && ($0.isNumber || $0 == "-") }
         return digits + "°"
+    }
+}
+
+/// Global weather source: MET Norway's Locationforecast API (api.met.no). Free, no key or account —
+/// just a descriptive User-Agent — and licensed for commercial use (CC BY 4.0) under a fair-use
+/// policy rather than a hard quota. Its forecast grid covers the whole world, not just Norway.
+enum MetNorwayWeatherService {
+    static let attributionURL = URL(string: "https://www.met.no/")!
+
+    enum Failure: Error {
+        case noData
+    }
+
+    /// MET Norway asks every client to identify itself with a descriptive User-Agent.
+    private static let userAgent = "BigWidget/1.0 (Studio-D.BigWidget)"
+
+    static func current(at coordinate: CLLocationCoordinate2D) async throws -> WeatherReading {
+        let url = URL(string: String(
+            format: "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=%.4f&lon=%.4f",
+            coordinate.latitude, coordinate.longitude
+        ))!
+        let response = try await get(ForecastResponse.self, from: url)
+        guard let entry = response.properties.timeseries.first,
+              let celsius = entry.data.instant.details.airTemperature
+        else { throw Failure.noData }
+
+        let symbolCode = entry.data.next1Hours?.summary.symbolCode ?? "cloudy"
+        let isDay = !symbolCode.hasSuffix("_night")
+        return WeatherReading(
+            temperature: WeatherReading.format(Measurement(value: celsius, unit: UnitTemperature.celsius)),
+            celsius: celsius,
+            condition: condition(for: symbolCode),
+            symbolName: symbol(for: symbolCode, isDay: isDay),
+            source: .metNorway
+        )
+    }
+
+    /// A human-readable label for a symbol code like "lightrainshowers_day" or "heavyrainandthunder".
+    private static func condition(for symbolCode: String) -> String {
+        let base = symbolCode
+            .replacingOccurrences(of: "_day", with: "")
+            .replacingOccurrences(of: "_night", with: "")
+            .replacingOccurrences(of: "_polartwilight", with: "")
+        let known: [String: String] = [
+            "clearsky": "Clear", "fair": "Fair", "partlycloudy": "Partly Cloudy", "cloudy": "Cloudy",
+            "fog": "Fog", "rain": "Rain", "lightrain": "Light Rain", "heavyrain": "Heavy Rain",
+            "rainshowers": "Rain Showers", "lightrainshowers": "Light Rain Showers",
+            "heavyrainshowers": "Heavy Rain Showers",
+            "sleet": "Sleet", "lightsleet": "Light Sleet", "heavysleet": "Heavy Sleet",
+            "sleetshowers": "Sleet Showers", "lightsleetshowers": "Light Sleet Showers",
+            "heavysleetshowers": "Heavy Sleet Showers",
+            "snow": "Snow", "lightsnow": "Light Snow", "heavysnow": "Heavy Snow",
+            "snowshowers": "Snow Showers", "lightsnowshowers": "Light Snow Showers",
+            "heavysnowshowers": "Heavy Snow Showers",
+            "rainandthunder": "Thunderstorms", "heavyrainandthunder": "Severe Thunderstorms",
+            "rainshowersandthunder": "Thunderstorms", "sleetandthunder": "Thunderstorms",
+            "snowandthunder": "Thunder Snow"
+        ]
+        if let label = known[base] { return label }
+        if base.contains("thunder") { return "Thunderstorms" }
+        return base.isEmpty ? "Weather" : base
+    }
+
+    /// An SF Symbol for a symbol code such as "lightrainshowers_day" or "partlycloudy_night".
+    private static func symbol(for symbolCode: String, isDay: Bool) -> String {
+        func has(_ words: String...) -> Bool { words.contains { symbolCode.contains($0) } }
+        if has("thunder") { return "cloud.bolt.rain.fill" }
+        if has("snow") { return "cloud.snow.fill" }
+        if has("sleet") { return "cloud.sleet.fill" }
+        if has("heavyrain") { return "cloud.heavyrain.fill" }
+        if has("lightrain") { return "cloud.drizzle.fill" }
+        if has("rain") { return "cloud.rain.fill" }
+        if has("fog") { return "cloud.fog.fill" }
+        if has("partlycloudy") { return isDay ? "cloud.sun.fill" : "cloud.moon.fill" }
+        if has("cloudy") { return "cloud.fill" }
+        if has("fair", "clearsky") { return isDay ? "sun.max.fill" : "moon.stars.fill" }
+        return "cloud.fill"
+    }
+
+    // MARK: Networking
+
+    private static func get<Response: Decodable>(_ type: Response.Type, from url: URL) async throws -> Response {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Response.self, from: data)
+    }
+
+    private struct ForecastResponse: Decodable {
+        struct Properties: Decodable {
+            struct Entry: Decodable {
+                struct EntryData: Decodable {
+                    struct Instant: Decodable {
+                        struct Details: Decodable {
+                            var airTemperature: Double?
+                            enum CodingKeys: String, CodingKey {
+                                case airTemperature = "air_temperature"
+                            }
+                        }
+                        var details: Details
+                    }
+                    struct NextHours: Decodable {
+                        struct Summary: Decodable {
+                            var symbolCode: String
+                            enum CodingKeys: String, CodingKey {
+                                case symbolCode = "symbol_code"
+                            }
+                        }
+                        var summary: Summary
+                    }
+                    var instant: Instant
+                    var next1Hours: NextHours?
+                    enum CodingKeys: String, CodingKey {
+                        case instant
+                        case next1Hours = "next_1_hours"
+                    }
+                }
+                var time: Date
+                var data: EntryData
+            }
+            var timeseries: [Entry]
+        }
+        var properties: Properties
     }
 }
 
