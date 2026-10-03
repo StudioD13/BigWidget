@@ -89,17 +89,6 @@ enum AppTile: String, CaseIterable, Identifiable {
 
     var id: Self { self }
     var storageKey: String { SharedStore.showKey(rawValue) }
-
-    /// A stable per-tile number, so Random can give each tile its own independent combination
-    /// instead of all of them sharing one.
-    var randomSeed: Int {
-        switch self {
-        case .time: 0
-        case .date: 1
-        case .weather: 2
-        case .battery: 3
-        }
-    }
 }
 
 #Preview {

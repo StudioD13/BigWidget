@@ -6,6 +6,8 @@
 	<array>
 		<string>Studio-D.BigWidget.refresh</string>
 	</array>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

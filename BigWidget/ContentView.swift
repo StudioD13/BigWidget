@@ -23,15 +23,23 @@ struct ContentView: View {
     var body: some View {
         // Ticks once a minute so Random can move to a new look; otherwise just redraws the
         // (identical) style, which costs nothing.
-        TimelineView(.periodic(from: .now, by: 60)) { context in
+        TimelineView(.periodic(from: .now, by: 60)) { _ in
             GeometryReader { proxy in
                 TileGroup(spacing: spacing) {
-                    arrangement(for: proxy.size, date: context.date)
+                    arrangement(for: proxy.size)
                 }
                 .padding(spacing)
             }
         }
+        #if os(visionOS)
+        // visionOS reserves the area just outside a window's bounds for its own window controls
+        // (move, resize, close); a plain corner overlay sits in that same territory and the system
+        // doesn't draw it. An ornament is the platform's actual mechanism for a persistent control
+        // attached to a window, rendered outside the content bounds where it won't conflict.
+        .ornament(attachmentAnchor: .scene(.bottom)) { settingsOrnament }
+        #else
         .overlay(alignment: .bottomTrailing) { settingsButton }
+        #endif
         .sheet(isPresented: $showsSettings) {
             SettingsView()
                 #if os(macOS)
@@ -46,12 +54,13 @@ struct ContentView: View {
     }
 
     /// The look to draw a tile with: a new, independent random combination every minute for each
-    /// tile (Random), or the one chosen manually, shared by all tiles. Widgets compute this the same
-    /// way, so a Match App widget lands on the same look without needing the app to be open.
-    private func currentStyle(for tile: AppTile, at date: Date) -> NeonStyle {
-        isRandom ? .random(for: date, element: tile.randomSeed) : NeonStyle(scheme: scheme, numbers: numbers, bloom: bloom, thickness: thickness)
+    /// tile (Random) — rolled fresh here, so it never matches any widget or any other instance of
+    /// the app — or the one chosen manually, shared by all tiles.
+    private func currentStyle(for tile: AppTile) -> NeonStyle {
+        isRandom ? .random() : NeonStyle(scheme: scheme, numbers: numbers, bloom: bloom, thickness: thickness)
     }
 
+    #if !os(visionOS)
     private var settingsButton: some View {
         Button {
             showsSettings = true
@@ -65,6 +74,26 @@ struct ContentView: View {
         .keyboardShortcut(",", modifiers: .command)
         .padding(spacing * 1.5)
     }
+    #endif
+
+    #if os(visionOS)
+    /// Per Apple's own guidance: a control that needs to stay persistently reachable but doesn't
+    /// belong inside the window's content belongs in an ornament, not an overlay. Borderless, since
+    /// the ornament's own glass background already gives it a visible backing.
+    private var settingsOrnament: some View {
+        Button {
+            showsSettings = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.title2)
+                .padding(8)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Settings")
+        .padding(8)
+        .glassBackgroundEffect()
+    }
+    #endif
 
     private var visibleTiles: [AppTile] {
         let shown: [AppTile: Bool] = [.time: showTime, .date: showDate, .weather: showWeather, .battery: showBattery]
@@ -73,7 +102,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func tile(_ tile: AppTile, at date: Date) -> some View {
+    private func tile(_ tile: AppTile) -> some View {
         Group {
             switch tile {
             case .time: TimeWidget()
@@ -82,7 +111,7 @@ struct ContentView: View {
             case .battery: BatteryWidget(monitor: battery)
             }
         }
-        .environment(\.neonStyle, currentStyle(for: tile, at: date))
+        .environment(\.neonStyle, currentStyle(for: tile))
     }
 
     /// Time gets extra room whenever it's shown — it's the thing people check most — split evenly
@@ -96,7 +125,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func arrangement(for size: CGSize, date: Date) -> some View {
+    private func arrangement(for size: CGSize) -> some View {
         let tiles = visibleTiles
         let aspect = size.width / max(size.height, 1)
 
@@ -105,7 +134,7 @@ struct ContentView: View {
             let usable = size.width - spacing * CGFloat(tiles.count + 1)
             HStack(spacing: spacing) {
                 ForEach(tiles) { item in
-                    tile(item, at: date).frame(width: usable * share(of: item, in: tiles))
+                    tile(item).frame(width: usable * share(of: item, in: tiles))
                 }
             }
         } else if aspect > 0.75 && tiles.count > 2 {
@@ -114,9 +143,9 @@ struct ContentView: View {
             let usableHeight = size.height - spacing
             let topShare = tiles.first == .time ? 1.6 / 2.6 : 0.5
             VStack(spacing: spacing) {
-                tile(tiles[0], at: date).frame(height: usableHeight * topShare)
+                tile(tiles[0]).frame(height: usableHeight * topShare)
                 HStack(spacing: spacing) {
-                    ForEach(tiles.dropFirst()) { tile($0, at: date) }
+                    ForEach(tiles.dropFirst()) { tile($0) }
                 }
                 .frame(height: usableHeight * (1 - topShare))
             }
@@ -125,7 +154,7 @@ struct ContentView: View {
             let usable = size.height - spacing * CGFloat(tiles.count + 1)
             VStack(spacing: spacing) {
                 ForEach(tiles) { item in
-                    tile(item, at: date).frame(height: usable * share(of: item, in: tiles))
+                    tile(item).frame(height: usable * share(of: item, in: tiles))
                 }
             }
         }

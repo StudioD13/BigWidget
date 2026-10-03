@@ -83,14 +83,14 @@ struct Provider: AppIntentTimelineProvider {
         var weather = readouts.contains(.weather) ? Self.showableWeather : nil
         if readouts.contains(.weather) && weather == nil && context.isPreview { weather = .sample }
         return BigWidgetEntry(
-            date: .now, readouts: readouts, styles: Self.styles(for: configuration, at: .now),
+            date: .now, readouts: readouts, styles: Self.styles(for: configuration),
             battery: shownBattery, weather: weather
         )
     }
 
-    /// Every readout's style at `date`, resolved together so Random can give each its own.
-    private static func styles(for configuration: ConfigurationAppIntent, at date: Date) -> [Readout: NeonStyle] {
-        Dictionary(uniqueKeysWithValues: Readout.allCases.map { ($0, configuration.style(for: $0, at: date)) })
+    /// Every readout's style, resolved together so Random can give each its own.
+    private static func styles(for configuration: ConfigurationAppIntent) -> [Readout: NeonStyle] {
+        Dictionary(uniqueKeysWithValues: Readout.allCases.map { ($0, configuration.style(for: $0)) })
     }
 
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<BigWidgetEntry> {
@@ -98,7 +98,7 @@ struct Provider: AppIntentTimelineProvider {
         let readouts = configuration.readouts
         let showsWeather = readouts.contains(.weather)
         let weather = showsWeather ? Self.showableWeather : nil
-        let loggedStyle = configuration.style(for: .time, at: .now)
+        let loggedStyle = configuration.style(for: .time)
         Self.logger.notice("""
             Timeline: matchApp=\(configuration.matchAppStyle, privacy: .public) \
             isRandom=\(configuration.isRandom, privacy: .public) \
@@ -121,7 +121,7 @@ struct Provider: AppIntentTimelineProvider {
         let entries = (0..<60).compactMap { offset -> BigWidgetEntry? in
             guard let date = calendar.date(byAdding: .minute, value: offset, to: startOfMinute) else { return nil }
             return BigWidgetEntry(
-                date: date, readouts: readouts, styles: Self.styles(for: configuration, at: date), battery: battery, weather: weather
+                date: date, readouts: readouts, styles: Self.styles(for: configuration), battery: battery, weather: weather
             )
         }
         // Always ask back soon, whether or not weather happens to be fresh right now — someone
@@ -613,6 +613,6 @@ private let previewStyles: [String: NeonStyle] = [
     BigWidgetWidgets()
 } timeline: {
     let readouts = Readout.allCases
-    let styles = Dictionary(uniqueKeysWithValues: readouts.map { ($0, NeonStyle.random(for: .now, element: $0.randomSeed)) })
+    let styles = Dictionary(uniqueKeysWithValues: readouts.map { ($0, NeonStyle.random()) })
     BigWidgetEntry(date: .now, readouts: readouts, styles: styles, battery: sampleBattery, weather: .sample)
 }

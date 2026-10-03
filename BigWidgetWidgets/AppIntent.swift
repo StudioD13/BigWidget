@@ -117,18 +117,15 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
         return result.isEmpty ? [.time] : result
     }
 
-    /// The style to draw `readout` with at `date`: the app's (from the shared App Group) or this
-    /// widget's own, each falling back to a random combination — from the same minute-and-element-
-    /// seeded source the app uses — when Random is on, so each readout gets its own independent
-    /// combination instead of all of them sharing one. Taking a date (rather than always `.now`)
-    /// lets a widget's precomputed, once-an-hour timeline give each minute's entry its own distinct
-    /// random look.
-    func style(for readout: Readout, at date: Date) -> NeonStyle {
+    /// The style to draw `readout` with: the app's (from the shared App Group) or this widget's
+    /// own, each falling back to a fresh, independent random combination when Random is on — rolled
+    /// separately for every readout and every widget instance, so none of them match each other.
+    func style(for readout: Readout) -> NeonStyle {
         if matchAppStyle {
-            return SharedStore.isRandom ? .random(for: date, element: readout.randomSeed) : SharedStore.appStyle
+            return SharedStore.isRandom ? .random() : SharedStore.appStyle
         }
         return isRandom
-            ? .random(for: date, element: readout.randomSeed)
+            ? .random()
             : NeonStyle(scheme: scheme, numbers: numbers, bloom: bloom, thickness: thickness)
     }
 }
@@ -136,18 +133,6 @@ struct ConfigurationAppIntent: WidgetConfigurationIntent {
 /// Raw values match the app's readout switches in the App Group (see `SharedStore.showsInApp`).
 enum Readout: String, Hashable, Codable, CaseIterable {
     case time, date, battery, weather
-
-    /// A stable per-readout number, so Random can give each one its own independent combination.
-    /// Matches `AppTile.randomSeed` in the app, so a readout picks the same look whichever side
-    /// computes it.
-    var randomSeed: Int {
-        switch self {
-        case .time: 0
-        case .date: 1
-        case .weather: 2
-        case .battery: 3
-        }
-    }
 }
 
 // Raw values are saved in people's widget configurations, so never rename existing cases.

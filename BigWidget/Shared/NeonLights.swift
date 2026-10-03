@@ -279,38 +279,17 @@ struct NeonStyle: Equatable, Sendable, Codable {
         }
     }
 
-    /// A combination that's random for `date`'s minute and `element` (e.g. one readout among
-    /// several shown at once): the same for every call with that minute and element (so the app and
-    /// any matching widgets agree without talking to each other, and every precomputed entry for
-    /// that minute matches), different for the next minute, and independent of every other element
-    /// showing at the same time — so with four readouts on screen, Random gives each its own
-    /// combination instead of all four sharing one.
-    static func random(for date: Date, element: Int = 0) -> NeonStyle {
-        let minute = Int64(date.timeIntervalSinceReferenceDate / 60)
-        let seed = UInt64(bitPattern: minute) ^ (UInt64(bitPattern: Int64(element)) &* 0x9E3779B97F4A7C15)
-        var generator = SeededGenerator(seed: seed)
-        return NeonStyle(
-            scheme: NeonScheme.allCases.randomElement(using: &generator)!,
-            numbers: NumberStyle.allCases.randomElement(using: &generator)!,
-            bloom: NeonBloom.allCases.randomElement(using: &generator)!,
-            thickness: NumberThickness.allCases.randomElement(using: &generator)!
+    /// A genuinely random combination: a fresh, independent roll every time this is called, from
+    /// the system's own random source. Each app, each widget instance, and each readout within
+    /// them calls this separately, so none of them agree with each other — two widgets sitting side
+    /// by side on the same Home Screen land on different looks, the same as two different devices.
+    static func random() -> NeonStyle {
+        NeonStyle(
+            scheme: NeonScheme.allCases.randomElement()!,
+            numbers: NumberStyle.allCases.randomElement()!,
+            bloom: NeonBloom.allCases.randomElement()!,
+            thickness: NumberThickness.allCases.randomElement()!
         )
-    }
-}
-
-/// A small deterministic random source (SplitMix64), so `NeonStyle.random(for:)` gives the same
-/// answer for the same minute every time it's asked, in any process.
-private struct SeededGenerator: RandomNumberGenerator {
-    private var state: UInt64
-
-    init(seed: UInt64) { state = seed }
-
-    mutating func next() -> UInt64 {
-        state &+= 0x9E3779B97F4A7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
-        return z ^ (z >> 31)
     }
 }
 

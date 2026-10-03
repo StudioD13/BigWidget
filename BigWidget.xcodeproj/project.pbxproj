@@ -42,6 +42,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		63A7991430714F7F00A0549B /* Exceptions for "BigWidget" folder in "BigWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 000000000000000100000000 /* BigWidget */;
+		};
 		63E7D57330698324004F513D /* Exceptions for "BigWidgetWidgets" folder in "BigWidgetWidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -54,6 +61,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* BigWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				63A7991430714F7F00A0549B /* Exceptions for "BigWidget" folder in "BigWidget" target */,
+			);
 			path = BigWidget;
 			sourceTree = "<group>";
 		};
@@ -362,6 +372,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "BigWidget" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = BigWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -372,6 +383,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BigWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BigWidget;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocationUsageDescription = "BigWidget uses your location to show the current temperature and conditions.";
@@ -407,6 +419,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "BigWidget" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = BigWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -417,6 +430,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BigWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BigWidget;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocationUsageDescription = "BigWidget uses your location to show the current temperature and conditions.";
